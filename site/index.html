@@ -6,6 +6,12 @@
     <title>Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA</title>
     <meta name="description" content="Cloak is a training recipe that endows a vision-language-action (VLA) model with zero-shot cross-embodiment transfer by cloaking the end-effector from its own wrist camera.">
 
+    <!-- Favicon (from tml.stanford.edu) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+    <link rel="icon" href="assets/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+
     <!-- Bulma (CSS framework, no build step, responsive) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
     <!-- Font Awesome for icon buttons -->
@@ -20,6 +26,8 @@
         .author-block { font-size: 1.15rem; }
         .section { padding: 2.5rem 1.5rem; }
         .abstract-text { text-align: justify; line-height: 1.7; }
+        /* Italicized terms reference labeled blocks in the overview figure */
+        .abstract-text i { color: #5e4b9e; font-weight: 600; font-style: italic; }
 
         /* 16:9 responsive embed for the video / figure placeholders */
         .embed-16x9 {
@@ -109,6 +117,10 @@
                     <span class="icon"><i class="fab fa-github"></i></span>
                     <span>Code</span>
                 </a>
+                <a class="button is-dark is-rounded" href="https://twitter.com/" disabled title="Coming soon">
+                    <span class="icon"><i class="fab fa-x-twitter"></i></span>
+                    <span>Tweet</span>
+                </a>
             </div>
         </div>
     </section>
@@ -157,69 +169,18 @@
 
             <div class="content abstract-text">
                 <p>
-                    Reaching a new end-effector zero-shot is hard because of both a <strong>visual gap</strong> — the end-effector's appearance in its own wrist camera — and a <strong>kinematic gap</strong>. The kinematic gap has a structured, geometric character that inverse kinematics can overcome; the visual gap is the binding constraint, since a perception stack trained on one embodiment bakes its appearance into its features. <em>Cloak</em> addresses both.
+                    Large-scale robot datasets of gripper demonstrations exist for Vision-Language-Action (VLA) model training, but hardware is evolving rapidly, especially as the frontier expands to include dexterous robotic hands. This raises the question of how we can repurpose data collected on one source embodiment to control an unseen target embodiment. Our goal is to deploy a VLA policy trained on one embodiment to another unseen embodiment zero-shot, without any new data collection and without any finetuning or retraining.
+                </p>
+                <p>
+                    Deploying a VLA policy zero-shot to an unseen embodiment, there are two main challenges. First, a <strong>kinematic gap</strong> arises from the different geometries and kinematics of the source and target embodiments. Second, a <strong>visual gap</strong> arises from the different appearances of the source and target end-effectors in their own wrist cameras. The former can be overcome with inverse kinematics, but the latter is less straightforward to overcome.
+                </p>
+                <p>
+                    <strong>Visual gap.</strong> To handle the visual gap, we mask the end-effector from its own wrist view using a geometric <i>mask render</i> in simulation rather than generative inpainting. We augment the mask (<i>mask augment</i>) during training so the policy does not overfit to one end-effector silhouette. We then use the augmented mask to compute an attention mask for the <i>vision encoder</i>, cloaking the source embodiment inside the VLA. At deployment on an unseen target embodiment, we cloak the target end-effector in the same way, without augmentations.
                 </p>
 
                 <p>
-                    <strong>Embodiment mask.</strong> Using the robot's link meshes, its proprioceptive state, and the wrist camera's calibration, we render the end-effector's silhouette in simulation via forward kinematics and project it into the wrist view, yielding a binary embodiment mask in real time — no segmentation model and no generative inpainting.
+                    <strong>Kinematic gap.</strong> The VLA is trained unaware of any future target embodiment, so the input state and output actions stay in the source embodiment's joint space. We therefore must convert between the source and target embodiments. To convert from embodiment A to B, we use FK to compute the 6D pose of two tip frames on embodiment A (e.g. gripper jaws) and then IK to find the corresponding joint configuration on embodiment B that achieves the same two tip poses (e.g. for two fingertips). This IK(FK()) operation happens in two places: <i>src2trg</i> converts VLA output actions to the target embodiment. <i>trg2src</i> converts the target embodiment's state observations to the source embodiment's joint space.
                 </p>
-
-                <p>
-                    <strong>Mask augmentation (training only).</strong> We randomize the mask shape during training by unioning random capsules onto its contour and subtracting random disks from its interior, so the policy never overfits to one fixed gripper silhouette. We fill the masked region with a rolled copy of the same image so the augmentation never reveals the source embodiment.
-                </p>
-
-                <p>
-                    <strong>Masked attention in the vision encoder.</strong> The mask is downsampled to the ViT's patch grid and used to bias self-attention so no query reads from a masked patch — equivalent to dropping the end-effector tokens at constant sequence length, gating them out of the downstream cross-modal attention with the language and state.
-                </p>
-
-                <p>
-                    <strong>Tip-pose retargeting.</strong> Cloak-VLA's inputs and outputs stay in the source robot's joint space. To deploy on an unseen embodiment, we designate two tips on each embodiment (e.g. two gripper jaws, or two fingertips) and bridge the action spaces with forward and inverse kinematics, mapping the target state to the source input and the source action output back to the target.
-                </p>
-            </div>
-        </div>
-    </section>
-
-    <!-- ===================== RESULTS ===================== -->
-    <section class="section">
-        <div class="container is-max-desktop">
-            <h2 class="title is-3 has-text-centered">Results</h2>
-
-            <div class="content abstract-text">
-                <p>
-                    Cloak-VLA is trained only on the <strong>Robotiq 2F-85</strong> source gripper from DROID, then deployed <strong>zero-shot</strong> — with no new data and no retraining — on an <strong>unseen UMI gripper</strong> and an <strong>unseen Sharpa five-fingered hand</strong>, all on the same Franka arm.
-                </p>
-            </div>
-
-            <!-- Result videos (one per embodiment). Replace each placeholder with a <video> or YouTube embed. -->
-            <div class="columns is-multiline mt-4">
-                <div class="column is-one-third">
-                    <div class="embed-16x9">
-                        <!-- e.g. <video src="assets/results/original-gripper.mp4" controls autoplay muted loop playsinline></video> -->
-                        <div class="placeholder-inner">
-                            <span class="icon"><i class="fas fa-video"></i></span>
-                            <span><strong>Original Gripper</strong></span>
-                            <span class="is-size-7">source &mdash; video placeholder</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="column is-one-third">
-                    <div class="embed-16x9">
-                        <div class="placeholder-inner">
-                            <span class="icon"><i class="fas fa-video"></i></span>
-                            <span><strong>UMI Gripper</strong></span>
-                            <span class="is-size-7">unseen &mdash; video placeholder</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="column is-one-third">
-                    <div class="embed-16x9">
-                        <div class="placeholder-inner">
-                            <span class="icon"><i class="fas fa-video"></i></span>
-                            <span><strong>Sharpa Hand</strong></span>
-                            <span class="is-size-7">unseen, 5 fingers &mdash; video placeholder</span>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </section>
@@ -242,11 +203,6 @@
     <!-- ===================== FOOTER ===================== -->
     <footer class="footer">
         <div class="container is-max-desktop has-text-centered content is-size-7 has-text-grey">
-            <p>
-                Website template adapted from the
-                <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a> project page.
-                Source available on GitHub.
-            </p>
         </div>
     </footer>
 
