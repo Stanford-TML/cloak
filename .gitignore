@@ -1,0 +1,86 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+.installed.cfg
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Packaging / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ===== ML / experiments =====
+wandb/
+mlruns/
+lightning_logs/
+outputs/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.h5
+*.npz
+data/
+datasets/
+logs/
+*.log
+
+# ===== Notebooks scratch =====
+*-checkpoint.ipynb
+
+# ===== Node / web (if tooling is added later) =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+
+# ===== Environment / secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Editors / IDEs =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini

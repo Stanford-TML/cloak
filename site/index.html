@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA</title>
+    <meta name="description" content="Cloak is a training recipe that endows a vision-language-action (VLA) model with zero-shot cross-embodiment transfer by cloaking the end-effector from its own wrist camera.">
+
+    <!-- Bulma (CSS framework, no build step, responsive) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
+    <!-- Font Awesome for icon buttons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: "Noto Sans", system-ui, sans-serif; }
+        .title, .subtitle, .author-block { font-family: "Google Sans", "Noto Sans", sans-serif; }
+        .publication-title { line-height: 1.25; }
+        .author-block { font-size: 1.15rem; }
+        .section { padding: 2.5rem 1.5rem; }
+        .abstract-text { text-align: justify; line-height: 1.7; }
+
+        /* 16:9 responsive embed for the video / figure placeholders */
+        .embed-16x9 {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .embed-16x9 > iframe,
+        .embed-16x9 > video,
+        .embed-16x9 > .placeholder-inner {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .embed-16x9 > video { object-fit: cover; }
+        .placeholder-inner {
+            background: #f0f0f3;
+            border: 2px dashed #c5c5cf;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #8a8a96;
+            text-align: center;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+        .placeholder-inner .icon { font-size: 2.5rem; }
+
+        /* generic image placeholder (figures) */
+        .img-placeholder {
+            width: 100%;
+            min-height: 220px;
+            background: #f0f0f3;
+            border: 2px dashed #c5c5cf;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #8a8a96;
+            text-align: center;
+            gap: 0.5rem;
+            padding: 2rem 1rem;
+        }
+        .img-placeholder .icon { font-size: 2.5rem; }
+
+        .results-table td, .results-table th { vertical-align: middle; white-space: nowrap; }
+        .results-table .sem { color: #999; font-size: 0.8em; }
+        pre.bibtex { background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
+        footer.footer { padding: 2rem 1.5rem; }
+    </style>
+</head>
+<body>
+
+    <!-- ===================== HEADER ===================== -->
+    <section class="section">
+        <div class="container is-max-desktop has-text-centered">
+            <h1 class="title is-2 publication-title">
+                Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA
+            </h1>
+
+            <div class="is-size-5 author-block mt-5">
+                <span><a href="https://www.michaelpiseno.com/" target="_blank" rel="noopener">Michael Piseno</a><sup>*</sup></span>&nbsp;&nbsp;
+                <span><a href="https://guytevet.github.io/" target="_blank" rel="noopener">Guy Tevet</a><sup>*</sup></span>&nbsp;&nbsp;
+                <span><a href="https://profiles.stanford.edu/c-karen-liu" target="_blank" rel="noopener">C. Karen Liu</a></span>
+            </div>
+
+            <div class="is-size-6 mt-3">
+                <span>Stanford University</span>
+            </div>
+            <div class="is-size-6 mt-1">
+                <span><sup>*</sup>Equal contribution</span>
+            </div>
+
+            <!-- Link buttons (placeholders — fill in hrefs) -->
+            <div class="buttons is-centered mt-5">
+                <a class="button is-dark is-rounded" disabled title="Coming soon">
+                    <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                    <span>Paper</span>
+                </a>
+                <a class="button is-dark is-rounded" disabled title="Coming soon">
+                    <span class="icon"><i class="fab fa-github"></i></span>
+                    <span>Code</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== TL;DR ===================== -->
+    <section class="section pt-0">
+        <div class="container is-max-desktop">
+            <p class="subtitle is-4 has-text-centered abstract-text">
+                <strong>TL;DR:</strong> Mask the gripper out of the vision encoder's attention, and a VLA trained on one gripper controls unseen end-effectors zero-shot.
+            </p>
+        </div>
+    </section>
+
+    <!-- ===================== VIDEO ===================== -->
+    <section class="section pt-0" id="video">
+        <div class="container is-max-desktop">
+            <div class="embed-16x9">
+                <iframe src="https://www.youtube.com/embed/VxyahSFryCM"
+                        title="Cloak" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== ABSTRACT ===================== -->
+    <section class="section">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3 has-text-centered">Abstract</h2>
+            <div class="content abstract-text">
+                <p>
+                    We present <em>Cloak</em>, a training recipe that endows a vision-language-action (VLA) model with zero-shot cross-embodiment transfer by cloaking the end-effector from its own wrist camera. We leverage the robot's known geometry to circumvent the need for segmentation models or generative models for inpainting. The mask is rendered in simulation using the robot's geometry and wrist camera calibration, projected into the wrist view in real time, and augmented during training so the policy does not overfit to one end-effector geometry. At inference, we mask an unseen end-effector the same way, and retarget its state and actions through two frames, such as two gripper jaws or two fingertips, with inverse kinematics. We demonstrate the recipe with Cloak-VLA, a Vision-Language-Action model trained with <em>Cloak</em> on a single-embodiment parallel-jaw gripper dataset. Without new data or retraining, Cloak-VLA transfers zero-shot to various unseen end-effectors, from another gripper to a five-fingered dexterous hand, while preserving the source embodiment's performance.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== METHOD ===================== -->
+    <section class="section">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3 has-text-centered">Method</h2>
+
+            <figure class="image mb-5">
+                <img src="assets/overview.png" alt="Cloak method overview: a geometric end-effector mask is rendered from the robot state and wrist camera parameters, augmented during training, and used to mask attention in the ViT vision encoder; tip-pose retargeting bridges embodiments via FK and IK.">
+            </figure>
+
+            <div class="content abstract-text">
+                <p>
+                    Reaching a new end-effector zero-shot is hard because of both a <strong>visual gap</strong> — the end-effector's appearance in its own wrist camera — and a <strong>kinematic gap</strong>. The kinematic gap has a structured, geometric character that inverse kinematics can overcome; the visual gap is the binding constraint, since a perception stack trained on one embodiment bakes its appearance into its features. <em>Cloak</em> addresses both.
+                </p>
+
+                <p>
+                    <strong>Embodiment mask.</strong> Using the robot's link meshes, its proprioceptive state, and the wrist camera's calibration, we render the end-effector's silhouette in simulation via forward kinematics and project it into the wrist view, yielding a binary embodiment mask in real time — no segmentation model and no generative inpainting.
+                </p>
+
+                <p>
+                    <strong>Mask augmentation (training only).</strong> We randomize the mask shape during training by unioning random capsules onto its contour and subtracting random disks from its interior, so the policy never overfits to one fixed gripper silhouette. We fill the masked region with a rolled copy of the same image so the augmentation never reveals the source embodiment.
+                </p>
+
+                <p>
+                    <strong>Masked attention in the vision encoder.</strong> The mask is downsampled to the ViT's patch grid and used to bias self-attention so no query reads from a masked patch — equivalent to dropping the end-effector tokens at constant sequence length, gating them out of the downstream cross-modal attention with the language and state.
+                </p>
+
+                <p>
+                    <strong>Tip-pose retargeting.</strong> Cloak-VLA's inputs and outputs stay in the source robot's joint space. To deploy on an unseen embodiment, we designate two tips on each embodiment (e.g. two gripper jaws, or two fingertips) and bridge the action spaces with forward and inverse kinematics, mapping the target state to the source input and the source action output back to the target.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== RESULTS ===================== -->
+    <section class="section">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3 has-text-centered">Results</h2>
+
+            <div class="content abstract-text">
+                <p>
+                    Cloak-VLA is trained only on the <strong>Robotiq 2F-85</strong> source gripper from DROID, then deployed <strong>zero-shot</strong> — with no new data and no retraining — on an <strong>unseen UMI gripper</strong> and an <strong>unseen Sharpa five-fingered hand</strong>, all on the same Franka arm.
+                </p>
+            </div>
+
+            <!-- Result videos (one per embodiment). Replace each placeholder with a <video> or YouTube embed. -->
+            <div class="columns is-multiline mt-4">
+                <div class="column is-one-third">
+                    <div class="embed-16x9">
+                        <!-- e.g. <video src="assets/results/original-gripper.mp4" controls autoplay muted loop playsinline></video> -->
+                        <div class="placeholder-inner">
+                            <span class="icon"><i class="fas fa-video"></i></span>
+                            <span><strong>Original Gripper</strong></span>
+                            <span class="is-size-7">source &mdash; video placeholder</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-one-third">
+                    <div class="embed-16x9">
+                        <div class="placeholder-inner">
+                            <span class="icon"><i class="fas fa-video"></i></span>
+                            <span><strong>UMI Gripper</strong></span>
+                            <span class="is-size-7">unseen &mdash; video placeholder</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-one-third">
+                    <div class="embed-16x9">
+                        <div class="placeholder-inner">
+                            <span class="icon"><i class="fas fa-video"></i></span>
+                            <span><strong>Sharpa Hand</strong></span>
+                            <span class="is-size-7">unseen, 5 fingers &mdash; video placeholder</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== BIBTEX ===================== -->
+    <section class="section">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3">BibTeX</h2>
+            <pre class="bibtex"><code>@misc{piseno2026cloak,
+    title         = {Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA},
+    author        = {Piseno, Michael and Tevet, Guy and Liu, C. Karen},
+    year          = {2026},
+    eprint        = {XXXX.XXXXX},
+    archivePrefix = {arXiv},
+    primaryClass  = {cs.RO}
+}</code></pre>
+        </div>
+    </section>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="footer">
+        <div class="container is-max-desktop has-text-centered content is-size-7 has-text-grey">
+            <p>
+                Website template adapted from the
+                <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a> project page.
+                Source available on GitHub.
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>
