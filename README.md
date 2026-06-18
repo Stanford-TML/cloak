@@ -11,3 +11,12 @@ python3 -m http.server 8000 --directory site
 ```
 
 Then visit http://localhost:8000.
+
+
+## Run on a remote machine
+
+```bash
+ssh -L 8000:localhost:8000 vilnius
+cd src/cloak
+python3 -m http.server 8000 --directory site
+```
