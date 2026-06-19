@@ -6,11 +6,13 @@
     <title>Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA</title>
     <meta name="description" content="Cloak is a training recipe that endows a vision-language-action (VLA) model with zero-shot cross-embodiment transfer by cloaking the end-effector from its own wrist camera.">
 
-    <!-- Favicon (from tml.stanford.edu) -->
+    <!-- Favicon commented out to inherit the root favicon from tml.stanford.edu -->
+    <!--
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
     <link rel="icon" href="assets/favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    -->
 
     <!-- Bulma (CSS framework, no build step, responsive) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
@@ -97,7 +99,7 @@
             <div class="is-size-5 author-block mt-5">
                 <span><a href="https://www.michaelpiseno.com/" target="_blank" rel="noopener">Michael Piseno</a><sup>*</sup></span>&nbsp;&nbsp;
                 <span><a href="https://guytevet.github.io/" target="_blank" rel="noopener">Guy Tevet</a><sup>*</sup></span>&nbsp;&nbsp;
-                <span><a href="https://profiles.stanford.edu/c-karen-liu" target="_blank" rel="noopener">C. Karen Liu</a></span>
+                <span><a href="https://tml.stanford.edu/" target="_blank" rel="noopener">C. Karen Liu</a></span>
             </div>
 
             <div class="is-size-6 mt-3">
@@ -164,7 +166,7 @@
             <h2 class="title is-3 has-text-centered">Method</h2>
 
             <figure class="image mb-5">
-                <img src="assets/overview.png" alt="Cloak method overview: a geometric end-effector mask is rendered from the robot state and wrist camera parameters, augmented during training, and used to mask attention in the ViT vision encoder; tip-pose retargeting bridges embodiments via FK and IK.">
+                <img src="assets/overview.svg" alt="Cloak method overview: a geometric end-effector mask is rendered from the robot state and wrist camera parameters, augmented during training, and used to mask attention in the ViT vision encoder; tip-pose retargeting bridges embodiments via FK and IK.">
             </figure>
 
             <div class="content abstract-text">
