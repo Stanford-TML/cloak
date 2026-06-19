@@ -19,17 +19,38 @@
     <!-- Font Awesome for icon buttons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700;800&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
+        /* Brand color: dark purple used for the labeled terms; the vivid variant pops in the title */
+        :root { --cloak-purple: #5e4b9e; --cloak-purple-vivid: #7048e8; }
         body { font-family: "Noto Sans", system-ui, sans-serif; }
         .title, .subtitle, .author-block { font-family: "Google Sans", "Noto Sans", sans-serif; }
-        .publication-title { line-height: 1.25; }
+        /* Lighten the title so the bold "Cloak:" stands out against it */
+        .publication-title { line-height: 1.25; font-weight: 500; }
+        /* "Cloak:" lead-in of the title — bold, enlarged, vivid brand purple */
+        .cloak-name { color: var(--cloak-purple-vivid); font-weight: 700; font-size: 1.2em; }
+        /* each letter fades independently, staggered, for a rolling ripple */
+        .cloak-name > span { display: inline-block; animation: cloak-fade 8s ease-in-out infinite; }
+        .cloak-name > span:nth-child(1) { animation-delay: -3.0s; }
+        .cloak-name > span:nth-child(2) { animation-delay: -2.4s; }
+        .cloak-name > span:nth-child(3) { animation-delay: -1.8s; }
+        .cloak-name > span:nth-child(4) { animation-delay: -1.2s; }
+        .cloak-name > span:nth-child(5) { animation-delay: -0.6s; }
+        .cloak-name > span:nth-child(6) { animation-delay: 0s; }
+        @keyframes cloak-fade {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.1; }
+        }
+        /* Respect users who prefer reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .cloak-name > span { animation: none; }
+        }
         .author-block { font-size: 1.15rem; }
         .section { padding: 2.5rem 1.5rem; }
         .abstract-text { text-align: justify; line-height: 1.7; }
         /* Italicized terms reference labeled blocks in the overview figure */
-        .abstract-text i { color: #5e4b9e; font-weight: 600; font-style: italic; }
+        .abstract-text i { color: var(--cloak-purple-vivid); font-weight: 600; font-style: italic; }
 
         /* 16:9 responsive embed for the video / figure placeholders */
         .embed-16x9 {
@@ -40,49 +61,102 @@
             overflow: hidden;
         }
         .embed-16x9 > iframe,
-        .embed-16x9 > video,
-        .embed-16x9 > .placeholder-inner {
+        .embed-16x9 > video {
             position: absolute;
             inset: 0;
             width: 100%;
             height: 100%;
         }
         .embed-16x9 > video { object-fit: cover; }
+
+        /* results grid videos — match the source clips' aspect ratio (1280x1440) */
+        .embed-vid {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1280 / 1440;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .embed-vid > video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        /* method label above each results video column — layout via Bulma utilities;
+           only the brand color of our method needs custom CSS */
+        .vid-label-ours { color: var(--cloak-purple-vivid); }
+        /* keep the subscript from inflating the label's line height, which mis-aligns the row */
+        #results sub { line-height: 0; }
+        /* placeholder shown where a clip isn't available yet */
         .placeholder-inner {
-            background: #f0f0f3;
-            border: 2px dashed #c5c5cf;
-            border-radius: 8px;
+            position: absolute;
+            inset: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 0.5rem;
+            background: #f0f0f3;
+            border: 2px dashed #c5c5cf;
             color: #8a8a96;
             text-align: center;
-            gap: 0.5rem;
             padding: 1rem;
         }
         .placeholder-inner .icon { font-size: 2.5rem; }
-
-        /* generic image placeholder (figures) */
-        .img-placeholder {
-            width: 100%;
-            min-height: 220px;
-            background: #f0f0f3;
-            border: 2px dashed #c5c5cf;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #8a8a96;
-            text-align: center;
-            gap: 0.5rem;
-            padding: 2rem 1rem;
+        /* playback-rate overlay shown on each result video */
+        .rate-badge {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            pointer-events: none;
         }
-        .img-placeholder .icon { font-size: 2.5rem; }
-
-        .results-table td, .results-table th { vertical-align: middle; white-space: nowrap; }
-        .results-table .sem { color: #999; font-size: 0.8em; }
+        /* minimal custom video controls: only a play/pause button + seek bar */
+        .vid-controls {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.6rem;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+        }
+        .vid-play {
+            flex: none;
+            background: none;
+            border: none;
+            padding: 0;
+            color: #fff;
+            font-size: 0.9rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .vid-seek {
+            flex: 1 1 auto;
+            min-width: 0;
+            accent-color: var(--cloak-purple-vivid);
+            cursor: pointer;
+        }
+        /* very faint rule between rows — centered between the prior videos and the next heading */
+        .row-divider {
+            height: 0;
+            background: none;
+            border: none;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+            margin: 2rem 0;
+        }
         pre.bibtex { background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
         footer.footer { padding: 2rem 1.5rem; }
     </style>
@@ -93,10 +167,10 @@
     <section class="section">
         <div class="container is-max-desktop has-text-centered">
             <h1 class="title is-2 publication-title">
-                Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA
+                <span class="cloak-name" aria-label="Cloak:"><span aria-hidden="true">C</span><span aria-hidden="true">l</span><span aria-hidden="true">o</span><span aria-hidden="true">a</span><span aria-hidden="true">k</span><span aria-hidden="true">:</span></span> Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA
             </h1>
 
-            <div class="is-size-5 author-block mt-5">
+            <div class="author-block mt-5">
                 <span><a href="https://www.michaelpiseno.com/" target="_blank" rel="noopener">Michael Piseno</a><sup>*</sup></span>&nbsp;&nbsp;
                 <span><a href="https://guytevet.github.io/" target="_blank" rel="noopener">Guy Tevet</a><sup>*</sup></span>&nbsp;&nbsp;
                 <span><a href="https://tml.stanford.edu/" target="_blank" rel="noopener">C. Karen Liu</a></span>
@@ -140,11 +214,12 @@
     <section class="section pt-0" id="video">
         <div class="container is-max-desktop">
             <div class="embed-16x9">
-                <iframe src="https://www.youtube.com/embed/VxyahSFryCM"
+                <iframe src="https://www.youtube.com/embed/C3bj6ijdWqQ"
                         title="Cloak" frameborder="0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowfullscreen></iframe>
             </div>
+            <p class="has-text-centered has-text-grey is-size-6 mt-2"><span>English subtitles available</span>&nbsp;&nbsp;·&nbsp;&nbsp;<span lang="zh-Hans">提供中文字幕</span></p>
         </div>
     </section>
 
@@ -187,6 +262,163 @@
         </div>
     </section>
 
+    <!-- ===================== RESULTS ===================== -->
+    <section class="section" id="results">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3 has-text-centered">Results</h2>
+
+            <figure class="image mb-6">
+                <img src="assets/main_result_avg.svg" alt="Average task progression (%) of Cloak-VLA versus baselines across embodiments: the source Robotiq gripper and three unseen embodiments (UMI gripper, YAM arm, Sharpa hand). Cloak-VLA matches the source on the original gripper and substantially outperforms the baselines on every unseen embodiment.">
+            </figure>
+
+            <div class="content abstract-text mb-6">
+                <p>
+                    On the source Robotiq gripper, where no embodiment gap exists, all three methods perform comparably (&approx;88% task progression). The differences emerge on the unseen embodiments: <strong>Cloak-VLA</strong> retains most of its source performance on the UMI gripper (85%), the YAM arm (86%), and the Sharpa hand (82%), while both baselines fall off sharply. The gap is largest on the dexterous Sharpa hand, where &pi;<sub>0.5</sub>-droid drops to 54% and LAP-VLA to 60%. Without masking, &pi;<sub>0.5</sub>-droid and LAP-VLA see an out-of-distribution end-effector in the wrist image and struggle to grasp objects accurately, the primary failure mode behind their lower scores on the unseen embodiments.
+                </p>
+            </div>
+
+            <hr class="row-divider">
+
+            <!-- Row 1: Robotiq (source embodiment) -->
+            <h3 class="title is-5 mt-0 mb-1">Robotiq <span class="has-text-weight-normal has-text-grey">(source embodiment)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Move the white mug near the bowl"</p>
+            <div class="columns">
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Robotiq_move/robotiq_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <div class="embed-vid"><video src="assets/videos/Robotiq_move/robotiq_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Robotiq_move/robotiq_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="row-divider">
+
+            <!-- Row 2: UMI Gripper -->
+            <h3 class="title is-5 mt-0 mb-1">UMI Gripper <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Fold the towel"</p>
+            <div class="columns">
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="row-divider">
+
+            <!-- Row 3: YAM Arm and Gripper -->
+            <h3 class="title is-5 mt-0 mb-1">YAM Arm and Gripper <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Remove the marker from the bowl"</p>
+            <div class="columns">
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/YAM_remove/yam_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <div class="embed-vid"><video src="assets/videos/YAM_remove/yam_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/YAM_remove/yam_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="row-divider">
+
+            <!-- Row 4: Sharpa Hand -->
+            <h3 class="title is-5 mt-0 mb-1">Sharpa Hand <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Put the cube in the yellow bowl"</p>
+            <div class="columns">
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+                <div class="column">
+                    <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                        <div class="vid-controls">
+                            <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
+                            <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ===================== BIBTEX ===================== -->
     <section class="section">
         <div class="container is-max-desktop">
@@ -207,6 +439,52 @@
         <div class="container is-max-desktop has-text-centered content is-size-7 has-text-grey">
         </div>
     </footer>
+
+    <!-- Play the result clips at 4x; playbackRate is not an HTML attribute and resets on load -->
+    <script>
+        document.querySelectorAll('.embed-vid').forEach(function (wrap) {
+            var v = wrap.querySelector('video');
+            if (!v) return; // placeholder cell, no video to wire up
+            var badge = wrap.querySelector('.rate-badge');
+            var playBtn = wrap.querySelector('.vid-play');
+            var playIcon = playBtn ? playBtn.querySelector('i') : null;
+            var seek = wrap.querySelector('.vid-seek');
+
+            // lock playback at 4x: snap back if the viewer or browser changes it
+            var lockRate = function () {
+                if (v.playbackRate !== 4) v.playbackRate = 4;
+                if (badge) badge.textContent = v.playbackRate + '×';
+            };
+            lockRate();
+            v.addEventListener('loadedmetadata', lockRate);
+            v.addEventListener('ratechange', lockRate);
+
+            // play/pause button reflects state; calling play() after the end replays from 0
+            var syncIcon = function () {
+                if (!playIcon) return;
+                playIcon.classList.toggle('fa-play', v.paused);
+                playIcon.classList.toggle('fa-pause', !v.paused);
+            };
+            var togglePlay = function () { if (v.paused) v.play(); else v.pause(); };
+            if (playBtn) playBtn.addEventListener('click', togglePlay);
+            v.addEventListener('click', togglePlay); // click anywhere on the video
+            v.style.cursor = 'pointer';
+            v.addEventListener('play', syncIcon);
+            v.addEventListener('pause', syncIcon);
+            v.addEventListener('ended', syncIcon); // no loop: stop and show the play icon
+            syncIcon();
+
+            // seek bar
+            if (seek) {
+                v.addEventListener('timeupdate', function () {
+                    if (v.duration) seek.value = (v.currentTime / v.duration) * 100;
+                });
+                seek.addEventListener('input', function () {
+                    if (v.duration) v.currentTime = (seek.value / 100) * v.duration;
+                });
+            }
+        });
+    </script>
 
 </body>
 </html>
