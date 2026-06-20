@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light only">
     <title>Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA</title>
     <meta name="description" content="Cloak is a training recipe that endows a vision-language-action (VLA) model with zero-shot cross-embodiment transfer by cloaking the end-effector from its own wrist camera.">
 
@@ -23,7 +24,7 @@
 
     <style>
         /* Brand color: dark purple used for the labeled terms; the vivid variant pops in the title */
-        :root { --cloak-purple: #5e4b9e; --cloak-purple-vivid: #7048e8; --stanford-cardinal: #8C1515; }
+        :root { color-scheme: light; --cloak-purple: #5e4b9e; --cloak-purple-vivid: #7048e8; --stanford-cardinal: #8C1515; }
         body { font-family: "Noto Sans", system-ui, sans-serif; }
         .title, .subtitle, .author-block { font-family: "Google Sans", "Noto Sans", sans-serif; }
         /* Lighten the title so the bold "Cloak:" stands out against it */
@@ -158,6 +159,29 @@
             border-top: 1px solid rgba(0, 0, 0, 0.05);
             margin: 2rem 0;
         }
+        /* Mobile only: turn each results comparison row into a swipeable carousel
+           instead of stacking the three method videos vertically. Pure CSS scroll-snap;
+           the video JS keys off .embed-vid so playback/controls are unaffected. */
+        @media screen and (max-width: 768px) {
+            #results .columns {
+                display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                scroll-snap-type: x mandatory;
+                -webkit-overflow-scrolling: touch;
+                margin-left: 0;
+                margin-right: 0;
+                gap: 0.75rem;
+                scrollbar-width: none; /* Firefox: hide scrollbar */
+            }
+            #results .columns::-webkit-scrollbar { display: none; } /* WebKit: hide scrollbar */
+            #results .column {
+                flex: 0 0 82%;          /* one video at a time, with a peek of the neighbors */
+                scroll-snap-align: center;
+                padding-left: 0;
+                padding-right: 0;
+            }
+        }
         pre.bibtex { background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
         footer.footer { padding: 2rem 1.5rem; }
     </style>
@@ -280,11 +304,11 @@
             <hr class="row-divider">
 
             <!-- Row 1: Robotiq (source embodiment) -->
-            <h3 class="title is-5 mt-0 mb-1">Robotiq <span class="has-text-weight-normal has-text-grey">(source embodiment)</span></h3>
+            <h3 class="title is-5 mt-0 mb-1">Original Gripper <span class="has-text-weight-normal has-text-grey">(source embodiment)</span></h3>
             <p class="is-size-6 has-text-grey mb-4">"Move the white mug near the bowl"</p>
             <div class="columns">
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA <span class="has-text-weight-normal has-text-grey">(ours)</span></p>
                     <div class="embed-vid"><video src="assets/videos/Robotiq_move/robotiq_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
@@ -293,7 +317,7 @@
                     </div>
                 </div>
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid</p>
                     <div class="embed-vid"><video src="assets/videos/Robotiq_move/robotiq_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
@@ -314,13 +338,13 @@
 
             <hr class="row-divider">
 
-            <!-- Row 2: UMI Gripper -->
-            <h3 class="title is-5 mt-0 mb-1">UMI Gripper <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
-            <p class="is-size-6 has-text-grey mb-4">"Fold the towel"</p>
+            <!-- Row 2: Sharpa Hand -->
+            <h3 class="title is-5 mt-0 mb-1">Sharpa Hand <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Put the cube in the yellow bowl"</p>
             <div class="columns">
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
-                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA <span class="has-text-weight-normal has-text-grey">(ours)</span></p>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
@@ -328,8 +352,8 @@
                     </div>
                 </div>
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
-                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + TP retargeting</p>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
@@ -338,7 +362,7 @@
                 </div>
                 <div class="column">
                     <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
-                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
@@ -354,7 +378,7 @@
             <p class="is-size-6 has-text-grey mb-4">"Remove the marker from the bowl"</p>
             <div class="columns">
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA <span class="has-text-weight-normal has-text-grey">(ours)</span></p>
                     <div class="embed-vid"><video src="assets/videos/YAM_remove/yam_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
@@ -363,7 +387,7 @@
                     </div>
                 </div>
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + TP retargeting</p>
                     <div class="embed-vid"><video src="assets/videos/YAM_remove/yam_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
@@ -384,13 +408,13 @@
 
             <hr class="row-divider">
 
-            <!-- Row 4: Sharpa Hand -->
-            <h3 class="title is-5 mt-0 mb-1">Sharpa Hand <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
-            <p class="is-size-6 has-text-grey mb-4">"Put the cube in the yellow bowl"</p>
+            <!-- Row 4: UMI Gripper -->
+            <h3 class="title is-5 mt-0 mb-1">UMI Gripper <span class="has-text-weight-normal has-text-grey">(unseen)</span></h3>
+            <p class="is-size-6 has-text-grey mb-4">"Fold the towel"</p>
             <div class="columns">
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA</p>
-                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <p class="has-text-centered has-text-weight-bold mb-2 vid-label-ours">Cloak-VLA <span class="has-text-weight-normal has-text-grey">(ours)</span></p>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v3-1.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
@@ -398,8 +422,8 @@
                     </div>
                 </div>
                 <div class="column">
-                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + retarget</p>
-                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <p class="has-text-centered has-text-weight-semibold mb-2">&pi;<sub>0.5</sub>-droid + TP retargeting</p>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_v0.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
@@ -408,7 +432,7 @@
                 </div>
                 <div class="column">
                     <p class="has-text-centered has-text-weight-semibold mb-2">LAP-VLA</p>
-                    <div class="embed-vid"><video src="assets/videos/Sharpa_pick_and_place/sharpa_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
+                    <div class="embed-vid"><video src="assets/videos/Umi_fold/umi_LAP.mp4" autoplay muted playsinline></video><span class="rate-badge">4&times;</span>
                         <div class="vid-controls">
                             <button class="vid-play" type="button" aria-label="Play/pause"><i class="fas fa-pause"></i></button>
                             <input class="vid-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek">
