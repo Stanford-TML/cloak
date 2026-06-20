@@ -23,13 +23,13 @@
 
     <style>
         /* Brand color: dark purple used for the labeled terms; the vivid variant pops in the title */
-        :root { --cloak-purple: #5e4b9e; --cloak-purple-vivid: #7048e8; }
+        :root { --cloak-purple: #5e4b9e; --cloak-purple-vivid: #7048e8; --stanford-cardinal: #8C1515; }
         body { font-family: "Noto Sans", system-ui, sans-serif; }
         .title, .subtitle, .author-block { font-family: "Google Sans", "Noto Sans", sans-serif; }
         /* Lighten the title so the bold "Cloak:" stands out against it */
         .publication-title { line-height: 1.25; font-weight: 500; }
         /* "Cloak:" lead-in of the title — bold, enlarged, vivid brand purple */
-        .cloak-name { color: var(--cloak-purple-vivid); font-weight: 700; font-size: 1.2em; }
+        .cloak-name { color: var(--stanford-cardinal); font-weight: 700; font-size: 1.2em; }
         /* each letter fades independently, staggered, for a rolling ripple */
         .cloak-name > span { display: inline-block; animation: cloak-fade 8s ease-in-out infinite; }
         .cloak-name > span:nth-child(1) { animation-delay: -3.0s; }
@@ -47,6 +47,7 @@
             .cloak-name > span { animation: none; }
         }
         .author-block { font-size: 1.15rem; }
+        .author-block a { color: var(--stanford-cardinal); }
         .section { padding: 2.5rem 1.5rem; }
         .abstract-text { text-align: justify; line-height: 1.7; }
         /* Italicized terms reference labeled blocks in the overview figure */
@@ -189,13 +190,13 @@
                     <span class="icon"><i class="fas fa-file-pdf"></i></span>
                     <span>Paper</span>
                 </a>
-                <a class="button is-dark is-rounded" disabled title="Coming soon">
-                    <span class="icon"><i class="fab fa-github"></i></span>
-                    <span>Code</span>
-                </a>
                 <a class="button is-dark is-rounded" href="https://twitter.com/" disabled title="Coming soon">
                     <span class="icon"><i class="fab fa-x-twitter"></i></span>
                     <span>Tweet</span>
+                </a>
+                <a class="button is-dark is-rounded" disabled title="Coming soon">
+                    <span class="icon"><i class="fab fa-github"></i></span>
+                    <span>Code (coming soon)</span>
                 </a>
             </div>
         </div>
@@ -205,7 +206,7 @@
     <section class="section pt-0">
         <div class="container is-max-desktop">
             <p class="subtitle is-4 has-text-centered abstract-text">
-                <strong>TL;DR:</strong> Mask the gripper out of the vision encoder's attention, and a VLA trained on one gripper controls unseen end-effectors zero-shot.
+                <strong>TL;DR:</strong> Mask the gripper out of the vision encoder's attention, and a VLA trained on one gripper controls unseen embodiments zero-shot.
             </p>
         </div>
     </section>
@@ -249,14 +250,13 @@
                     Large-scale robot datasets of gripper demonstrations exist for Vision-Language-Action (VLA) model training, but hardware is evolving rapidly, especially as the frontier expands to include dexterous robotic hands. This raises the question of how we can repurpose data collected on one source embodiment to control an unseen target embodiment. Our goal is to deploy a VLA policy trained on one embodiment to another unseen embodiment zero-shot, without any new data collection and without any finetuning or retraining.
                 </p>
                 <p>
-                    Deploying a VLA policy zero-shot to an unseen embodiment, there are two main challenges. First, a <strong>kinematic gap</strong> arises from the different geometries and kinematics of the source and target embodiments. Second, a <strong>visual gap</strong> arises from the different appearances of the source and target end-effectors in their own wrist cameras. The former can be overcome with inverse kinematics, but the latter is less straightforward to overcome.
+                   There are two main challenges in deploying a VLA policy zero-shot to an unseen embodiment. First, a <strong>kinematic gap</strong> arises from the different geometries and kinematics of the source and target embodiments. Second, a <strong>visual gap</strong> arises from the different appearances of the source and target end-effectors in their own wrist cameras. The former can be overcome with inverse kinematics, but the latter is less straightforward to handle.
+                </p>
+                <p>
+                    <strong>Kinematic gap.</strong> The VLA is trained unaware of any future target embodiment, so the input state and output actions stay in the source embodiment's joint space. Therefore, during deployment we must convert between the source and target embodiments. To convert from embodiment A to B, we use FK to compute the 6D pose of two tip frames on embodiment A (e.g. gripper jaws) followed by IK to find embodiment B's corresponding joint configuration that achieves the same two tip poses (e.g. for two fingertips). This FK-IK operation happens in two places: <i>src2trg</i> converts VLA output actions to the target embodiment. <i>trg2src</i> converts the target embodiment's proprioceptive state input to the source embodiment's joint space.
                 </p>
                 <p>
                     <strong>Visual gap.</strong> To handle the visual gap, we mask the end-effector from its own wrist view using a geometric <i>mask render</i> in simulation rather than generative inpainting. We augment the mask (<i>mask augment</i>) during training so the policy does not overfit to one end-effector silhouette. We then use the augmented mask to compute an attention mask for the <i>vision encoder</i>, cloaking the source embodiment inside the VLA. At deployment on an unseen target embodiment, we cloak the target end-effector in the same way, without augmentations.
-                </p>
-
-                <p>
-                    <strong>Kinematic gap.</strong> The VLA is trained unaware of any future target embodiment, so the input state and output actions stay in the source embodiment's joint space. We therefore must convert between the source and target embodiments. To convert from embodiment A to B, we use FK to compute the 6D pose of two tip frames on embodiment A (e.g. gripper jaws) and then IK to find the corresponding joint configuration on embodiment B that achieves the same two tip poses (e.g. for two fingertips). This IK(FK()) operation happens in two places: <i>src2trg</i> converts VLA output actions to the target embodiment. <i>trg2src</i> converts the target embodiment's state observations to the source embodiment's joint space.
                 </p>
             </div>
         </div>
