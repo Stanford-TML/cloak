@@ -1,0 +1,10 @@
+<!-- This scene file is only meant for visualing the model in Mujoco outside mjlab. Mjlab imports its own terrain and
+    therefore uses the included file directly as its entry point. -->
+<mujoco model="fr3_robotiq_scene">
+    <include file="fr3_robotiq.xml"/>
+
+    <worldbody>
+        <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+        <geom name="floor" size="0 0 0.01" type="plane" material="groundplane" conaffinity="0" contype="0"/>
+    </worldbody>
+</mujoco>

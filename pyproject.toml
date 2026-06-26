@@ -1,0 +1,19 @@
+[project]
+name = "cloak-extrinsics"
+version = "0.1.0"
+description = "Silhouette-calibrated DROID wrist extrinsics: data + reference code."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "numpy==1.26.4",
+    "scipy==1.17.1",
+    "mujoco==3.6.0",
+    "opencv-python-headless==4.11.0.86",
+    "tensorflow-cpu==2.15.0",
+    "tensorflow-datasets==4.9.9",
+    "tensorflow-metadata==1.17.3",
+    "pillow==12.2.0",
+    "tyro",
+]
+
+[tool.uv]
+package = false
