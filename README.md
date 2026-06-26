@@ -1,10 +1,8 @@
 # Cloak
 
-Project page for *Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA*.
+[![Project Page](https://img.shields.io/badge/Project_Page-blue)](https://tml.stanford.edu/cloak/)
 
-<p align="center">
-  <a href="https://tml.stanford.edu/cloak/"><img src="https://img.shields.io/badge/Project-Website-blue?style=for-the-badge" alt="Website"></a>
-</p>
+Project page for *Cloak: Zero-Shot Cross-Embodiment Manipulation by Masking the End-Effector from the VLA*.
 
 ## Calibrated DROID wrist extrinsics
 
