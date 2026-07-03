@@ -2,6 +2,8 @@
 
 [![Project Page](https://img.shields.io/badge/Project_Page-blue)](https://tml.stanford.edu/cloak/)
 
+> **Note:** Training code and model checkpoints are coming soon.
+
 
 ## Calibrated DROID wrist extrinsics
 
