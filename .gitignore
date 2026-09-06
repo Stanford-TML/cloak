@@ -83,7 +83,7 @@ yarn-error.log*
 # Vendored hand SDK is NOT tracked — the README documents how to install it.
 SharpaWaveSDK_4.3.4/
 # Robot-specific camera calibration (per-workstation; not for the public repo).
-droid/calibration/calibration_info*.json
+deployment/calibration/calibration_info*.json
 # Client runtime outputs
 test_videos/
 robot_camera_views.png

@@ -116,7 +116,7 @@ def transform_iterable_dataset(
         if data_config.norm_stats is None:
             raise ValueError(
                 "Normalization stats not found. "
-                "Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`."
+                "Make sure to run `preprocessing/compute_norm_stats.py --config-name=<your-config>`."
             )
         norm_stats = data_config.norm_stats
 

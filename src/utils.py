@@ -13,7 +13,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import tensorflow as tf
 
-from constants import RLDS_H, RLDS_W, ROBOTIQ_SCENE_XML, lerp_gripper_qpos
+from openpi.constants import RLDS_H, RLDS_W, ROBOTIQ_SCENE_XML, lerp_gripper_qpos
 
 # Geom group of the floor collision plane; hidden in the segmentation render.
 _COLLISION_GROUP = 3
@@ -48,7 +48,7 @@ def find_dataset_dir(data_dir) -> "Path":
     return hits[0].parent
 
 
-def _parse_lab(file_path: str) -> str:
+def parse_lab(file_path: str) -> str:
     parts = file_path.replace("\\", "/").split("/")
     for i, p in enumerate(parts):
         if p in ("success", "failure") and i > 0:
@@ -70,6 +70,28 @@ def _parse_timestamp_dir(ts_dir: str):
         return None
 
 
+def make_lang_annotation_key(lab: str, year: int, month: int, day: int, hh: int, mm: int, ss: int) -> str:
+    """Canonical '<LAB>|<timestamp>' lookup key shared by the metadata builder and preprocess script."""
+    lab = _LAB_BY_LOWER.get(lab.lower(), lab)
+    return f"{lab}|{year:04d}-{month:02d}-{day:02d}-{hh:02d}h-{mm:02d}m-{ss:02d}s"
+
+
+def parse_annotation_episode_id(episode_id: str):
+    """Parse a HF annotation episode_id '<LAB>+<hash>+<YYYY-MM-DD-HHh-MMm-SSs>' into a 7-tuple, or None."""
+    parts = episode_id.split("+")
+    if len(parts) != 3:
+        return None
+    lab, _hash, ts = parts
+    m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})-(\d{1,2})h-(\d{1,2})m-(\d{1,2})s", ts)
+    if not m:
+        return None
+    try:
+        year, month, day, hh, mm, ss = (int(x) for x in m.groups())
+    except ValueError:
+        return None
+    return lab, year, month, day, hh, mm, ss
+
+
 def file_path_to_lang_key(file_path: str):
     """DROID episode path -> canonical 'LAB|YYYY-MM-DD-HHh-MMm-SSs' key, or None."""
     parts = file_path.replace("\\", "/").rstrip("/").split("/")
@@ -80,10 +102,7 @@ def file_path_to_lang_key(file_path: str):
     parsed = _parse_timestamp_dir(parts[-1])
     if parsed is None:
         return None
-    lab = _parse_lab(file_path)
-    lab = _LAB_BY_LOWER.get(lab.lower(), lab)
-    y, mo, d, hh, mm, ss = parsed
-    return f"{lab}|{y:04d}-{mo:02d}-{d:02d}-{hh:02d}h-{mm:02d}m-{ss:02d}s"
+    return make_lang_annotation_key(parse_lab(file_path), *parsed)
 
 
 def decode_camera_frames(steps, camera_key: str) -> np.ndarray:

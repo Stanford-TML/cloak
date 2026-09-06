@@ -22,7 +22,7 @@ WANDB=true
 WANDB_FLAG=$([ "${WANDB}" = "true" ] && echo "" || echo "--no-wandb-enabled")
 
 # ${WANDB_FLAG} is intentionally unquoted so the empty case adds no argument.
-uv run --group train python scripts/train.py "${CONFIG}" \
+uv run --group train python src/train.py "${CONFIG}" \
     --exp-name "${EXP_NAME}" \
     --data.rlds-data-dir "${RLDS_DATA_DIR}" \
     ${WANDB_FLAG}

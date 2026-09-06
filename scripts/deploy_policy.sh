@@ -9,7 +9,7 @@ set -euo pipefail
 DEBUG=true
 
 # Which robot to drive. Must match the server's --embodiment (robotiq | sharpa |
-# umi | yam). "robotiq"/"sharpa" have client robot envs in this repo's droid/;
+# umi | yam). "robotiq"/"sharpa" have client robot envs in this repo's deployment/;
 # umi/yam additionally require their client-side robot env.
 EMBODIMENT=sharpa
 
@@ -27,7 +27,7 @@ DEBUG_FLAG=$([ "${DEBUG}" = "true" ] && echo "--debug" || echo "")
 # Server host/port use the defaults in deploy_policy.py (edit its Args to change
 # them). Client-side hardware deps live in the `client` dependency group.
 # ${DEBUG_FLAG} is intentionally unquoted so the empty case adds no argument.
-uv run --group client python scripts/deploy_policy.py \
+uv run --group client python deployment/deploy_policy.py \
     ${DEBUG_FLAG} \
     --embodiment "${EMBODIMENT}" \
     --max-timesteps "${TIMESTEPS}" \

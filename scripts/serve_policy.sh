@@ -23,4 +23,4 @@ else
 fi
 
 POLICY_ARGS=(policy:checkpoint --policy.config="${CONFIG}" --policy.dir="${CHECKPOINT_DIR}")
-uv run scripts/serve_policy.py --embodiment "${EMBODIMENT}" ${FIXED_HAND_FLAG} "${POLICY_ARGS[@]}"
+uv run deployment/serve_policy.py --embodiment "${EMBODIMENT}" ${FIXED_HAND_FLAG} "${POLICY_ARGS[@]}"
