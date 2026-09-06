@@ -41,8 +41,10 @@ To serve the policy, run:
 bash scripts/serve_policy.sh
 ```
 
-Set `CONFIG` and `CHECKPOINT_DIR` at the top of the script (available robots are
-listed there).
+Set `CONFIG`, `CHECKPOINT_DIR`, and `EMBODIMENT` at the top of the script. One
+config (`pi05_full_droid_finetune_v3-1_ik`, the full cloak method) serves every
+robot — `EMBODIMENT` (`robotiq` | `sharpa` | `umi` | `yam`) selects the wrist
+mask renderer and cross-embodiment IK at serve time.
 
 Also run the client, which accepts actions from the policy server and runs the robot environment:
 
@@ -51,7 +53,7 @@ bash scripts/deploy_policy.sh
 ```
 
 Before running, set the variables at the top of `deploy_policy.sh`:
-- `EMBODIMENT` — `sharpa` or `robotiq`, matching the served config.
+- `EMBODIMENT` — `robotiq` | `sharpa` | `umi` | `yam`, matching the server's `--embodiment`.
 - `EXTERNAL_CAMERA_ID` / `WRIST_CAMERA_ID` — your ZED serial numbers (the
   `SN<serial>` files under `/usr/local/zed/settings/`).
 

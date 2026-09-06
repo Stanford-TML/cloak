@@ -19,6 +19,8 @@ from openpi.constants import lerp_gripper_qpos
 # below, so the mask is unaffected even if the gripper passes under it.
 from openpi.constants import ROBOTIQ_SCENE_XML as ROBOTIQ_XML
 from openpi.constants import SHARPA_SCENE_XML as SHARPA_XML
+from openpi.constants import UMI_SCENE_XML as UMI_XML
+from openpi.constants import YAM_LINEAR_SCENE_XML as YAM_XML
 
 # Geom group reserved for a scene floor; disabled on the segmentation render so
 # the floor can't occlude the gripper in the depth buffer (a low/under-floor
@@ -60,9 +62,12 @@ class GripperMaskRenderer:
     """MuJoCo-based single-frame gripper segmentation mask renderer."""
 
     def __init__(self, scene_xml: str | Path = ROBOTIQ_XML, render_h: int = 180, render_w: int = 320,
-                 *, gripper_qpos_fn: Callable[..., np.ndarray] = lerp_gripper_qpos) -> None:
+                 *, gripper_qpos_fn: Callable[..., np.ndarray] = lerp_gripper_qpos, arm_dof: int = 7) -> None:
         self._render_h = render_h
         self._render_w = render_w
+        # Arm-DOF split for forward_qpos: 7 for Franka scenes (Robotiq/UMI/Sharpa),
+        # 6 for YAM. The gripper qpos block starts at qpos[arm_dof].
+        self._arm_dof = arm_dof
         # Maps the client's gripper command to the gripper-DOF qpos block (qpos[7:]).
         # Default = lerp_gripper_qpos (Robotiq scalar -> 8 coupled joints); the UMI
         # and Sharpa subclasses pass their own. Mirrors
@@ -162,10 +167,11 @@ class GripperMaskRenderer:
         preprocess_data.Sim.set_pose.
         """
         mujoco.mj_resetData(self._model, self._data)
-        self._data.qpos[:7] = joint_position
+        a = self._arm_dof
+        self._data.qpos[:a] = np.asarray(joint_position, dtype=float).reshape(-1)[:a]
         gripper_qpos = np.asarray(self._gripper_qpos_fn(gripper_command), dtype=float).reshape(-1)
-        n = self._model.nq - 7
-        self._data.qpos[7:7 + n] = gripper_qpos[:n]
+        n = self._model.nq - a
+        self._data.qpos[a:a + n] = gripper_qpos[:n]
         self._data.qvel[:] = 0.0
         mujoco.mj_forward(self._model, self._data)
         return self._data.qpos.copy()
@@ -328,3 +334,115 @@ def get_sharpa_renderer(
     if _sharpa_renderer_instance is None:
         _sharpa_renderer_instance = SharpaMaskRenderer(scene_xml=scene_xml, render_h=render_h, render_w=render_w)
     return _sharpa_renderer_instance
+
+
+# ===========================================================================
+# UMI parallel-jaw mask renderer
+# ===========================================================================
+#
+# Subclasses GripperMaskRenderer — overrides body-name detection and passes a
+# UMI ``gripper_qpos_fn``: the wire scalar (0=open, 1=closed) maps to the two
+# prismatic finger qpos as ``0.04 * (1 - g)`` metres, written straight into
+# qpos[7:9] by the base ``forward_qpos`` (Franka 7-DOF arm). The base name list
+# is empty by design — the whole jaw is one mask, no separate dilated base.
+
+_UMI_GRIPPER_BODY_NAMES = [
+    "panda_hand",
+    "left_finger",
+    "right_finger",
+]
+_UMI_FINGER_RANGE = 0.04
+
+
+def _umi_finger_qpos(gripper_position: float) -> np.ndarray:
+    """UMI scalar opening [0, 1] -> the two prismatic finger qpos (metres)."""
+    return np.full(2, _UMI_FINGER_RANGE * (1.0 - float(gripper_position)))
+
+
+class UmiMaskRenderer(GripperMaskRenderer):
+    """``GripperMaskRenderer`` variant for the Franka FR3 + UMI parallel jaw."""
+
+    def __init__(self, scene_xml: str | Path = UMI_XML, render_h: int = 180, render_w: int = 320) -> None:
+        super().__init__(
+            scene_xml=scene_xml,
+            render_h=render_h,
+            render_w=render_w,
+            gripper_qpos_fn=_umi_finger_qpos,
+        )
+
+    def _get_gripper_geom_ids(self) -> tuple[np.ndarray, np.ndarray]:
+        gripper_body_ids = {self._model.body(name).id for name in _UMI_GRIPPER_BODY_NAMES}
+        all_geom_ids = np.array([i for i in range(self._model.ngeom) if self._model.geom_bodyid[i] in gripper_body_ids])
+        return all_geom_ids, np.array([], dtype=int)
+
+
+_umi_renderer_instance: UmiMaskRenderer | None = None
+
+
+def get_umi_renderer(
+    scene_xml: str | Path = UMI_XML,
+    render_h: int = 180,
+    render_w: int = 320,
+) -> UmiMaskRenderer:
+    """Return a shared UmiMaskRenderer instance (created on first call)."""
+    global _umi_renderer_instance
+    if _umi_renderer_instance is None:
+        _umi_renderer_instance = UmiMaskRenderer(scene_xml=scene_xml, render_h=render_h, render_w=render_w)
+    return _umi_renderer_instance
+
+
+# ===========================================================================
+# YAM linear-gripper mask renderer
+# ===========================================================================
+#
+# YAM is a 6-DOF arm (not a Franka), so ``forward_qpos`` is overridden to write
+# the arm into qpos[:6] and the two slide fingers into qpos[6:8]. The wire scalar
+# (0=open, 1=closed) maps to the slide range ``0.0475 * (1 - g)`` metres. Gripper
+# bodies (gripper + two tips) mirror preprocess_data's _GRIPPER_BODY_NAMES_YAM;
+# empty base like UMI.
+
+_YAM_GRIPPER_BODY_NAMES = [
+    "gripper",
+    "tip_left",
+    "tip_right",
+]
+_YAM_ARM_DOF = 6
+_YAM_FINGER_RANGE = 0.0475
+
+
+def _yam_finger_qpos(gripper_position: float) -> np.ndarray:
+    """YAM scalar opening [0, 1] -> the two slide-finger qpos (metres)."""
+    return np.full(2, _YAM_FINGER_RANGE * (1.0 - float(gripper_position)))
+
+
+class YamMaskRenderer(GripperMaskRenderer):
+    """``GripperMaskRenderer`` variant for the I2RT YAM 6-DOF arm + linear jaw."""
+
+    def __init__(self, scene_xml: str | Path = YAM_XML, render_h: int = 180, render_w: int = 320) -> None:
+        super().__init__(
+            scene_xml=scene_xml,
+            render_h=render_h,
+            render_w=render_w,
+            gripper_qpos_fn=_yam_finger_qpos,
+            arm_dof=_YAM_ARM_DOF,  # YAM is a 6-DOF arm; slide fingers land in qpos[6:8]
+        )
+
+    def _get_gripper_geom_ids(self) -> tuple[np.ndarray, np.ndarray]:
+        gripper_body_ids = {self._model.body(name).id for name in _YAM_GRIPPER_BODY_NAMES}
+        all_geom_ids = np.array([i for i in range(self._model.ngeom) if self._model.geom_bodyid[i] in gripper_body_ids])
+        return all_geom_ids, np.array([], dtype=int)
+
+
+_yam_renderer_instance: YamMaskRenderer | None = None
+
+
+def get_yam_renderer(
+    scene_xml: str | Path = YAM_XML,
+    render_h: int = 180,
+    render_w: int = 320,
+) -> YamMaskRenderer:
+    """Return a shared YamMaskRenderer instance (created on first call)."""
+    global _yam_renderer_instance
+    if _yam_renderer_instance is None:
+        _yam_renderer_instance = YamMaskRenderer(scene_xml=scene_xml, render_h=render_h, render_w=render_w)
+    return _yam_renderer_instance

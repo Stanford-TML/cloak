@@ -12,8 +12,11 @@ import cv2
 import jax
 import numpy as np
 
+from openpi.constants import YAM_CAM_TO_GRIPPER, YAM_WRIST_INTRINSIC_FY
 from openpi.policies.gripper_mask_renderer import get_renderer
 from openpi.policies.gripper_mask_renderer import get_sharpa_renderer
+from openpi.policies.gripper_mask_renderer import get_umi_renderer
+from openpi.policies.gripper_mask_renderer import get_yam_renderer
 from openpi.shared.image_tools import resize_with_pad
 
 logger = logging.getLogger("openpi")
@@ -83,12 +86,20 @@ class InjectGripperMask:
         patch_masking_strategy: str | None = None,
         renderer_factory: Callable[[], "object"] | None = None,
         gripper_dilation_kernel_size: int = 16,
+        default_cam_to_gripper: np.ndarray | None = None,
+        default_intrinsic_fy: float | None = None,
     ) -> None:
         self._patch_masking_strategy = patch_masking_strategy
         self._logged_first_call = False
         # If None, falls back to module-level get_renderer() (Robotiq scene).
         self._renderer_factory = renderer_factory
         self._gripper_dilation_kernel_size = gripper_dilation_kernel_size
+        # Server-side fallbacks for clients that send no camera params (YAM).
+        # ``default_cam_to_gripper`` is a 6-vec [xyz, euler-xyz] composed the same
+        # way as a client-sent one; ``default_intrinsic_fy`` is the wrist fy (px).
+        # None for client-sourced robots (Robotiq/UMI/Sharpa).
+        self._default_cam_to_gripper = default_cam_to_gripper
+        self._default_intrinsic_fy = default_intrinsic_fy
 
     @staticmethod
     def combine_masks(gripper_mask: np.ndarray, base_mask: np.ndarray) -> np.ndarray:
@@ -128,11 +139,12 @@ class InjectGripperMask:
             f"{_MASK_KEY} already present in data; InjectGripperMask is an inference "
             "transform and assumes the mask is not yet in the data."
         )
-        if _EXTRINSIC_KEY not in data and _GRIPPER_EXT_KEY not in data:
+        has_client_ext = _EXTRINSIC_KEY in data or _GRIPPER_EXT_KEY in data
+        if not has_client_ext and self._default_cam_to_gripper is None:
             raise ValueError(
                 f"Masking is enabled but the client did not send '{_EXTRINSIC_KEY}' or "
-                f"'{_GRIPPER_EXT_KEY}'. Ensure the client has camera calibration set up "
-                "and is sending extrinsics."
+                f"'{_GRIPPER_EXT_KEY}', and no server-side default_cam_to_gripper is set. "
+                "Ensure the client has camera calibration set up and is sending extrinsics."
             )
 
         renderer = (self._renderer_factory or get_renderer)()
@@ -140,6 +152,8 @@ class InjectGripperMask:
         if _INTRINSIC_KEY in data:
             intrinsic = np.asarray(data[_INTRINSIC_KEY])
             renderer.set_intrinsics(fy=float(intrinsic[1]))
+        elif self._default_intrinsic_fy is not None:
+            renderer.set_intrinsics(fy=float(self._default_intrinsic_fy))
 
         joint_position = data["observation/joint_position"]
         gripper_pos = data["observation/gripper_position"]
@@ -149,17 +163,22 @@ class InjectGripperMask:
         gripper_position = gripper_pos.item()
 
         # Settle once, then derive cam-to-base from whichever extrinsic the client
-        # sent. Two protocols (same as InjectSharpaMask):
+        # sent. Three protocols:
         #  - New: client sends cam-to-gripper -> FK-compose with the settled EE
         #    attachment site to get cam-to-base.
         #  - Legacy: client sends cam-to-base directly.
+        #  - Server default (YAM): client sends nothing -> use
+        #    ``default_cam_to_gripper`` as cam-to-gripper and FK-compose.
         settled_qpos = renderer.forward_qpos(joint_position, gripper_position)
-        used_gripper_ext = _GRIPPER_EXT_KEY in data
-        if used_gripper_ext:
-            cam_to_gripper = np.asarray(data[_GRIPPER_EXT_KEY])
-            camera_extrinsic = renderer.compose_cam_to_base(cam_to_gripper)
-        else:
+        if _GRIPPER_EXT_KEY in data:
+            camera_extrinsic = renderer.compose_cam_to_base(np.asarray(data[_GRIPPER_EXT_KEY]))
+            used_gripper_ext = True
+        elif _EXTRINSIC_KEY in data:
             camera_extrinsic = np.asarray(data[_EXTRINSIC_KEY])
+            used_gripper_ext = False
+        else:
+            camera_extrinsic = renderer.compose_cam_to_base(np.asarray(self._default_cam_to_gripper))
+            used_gripper_ext = True
         gripper_mask, base_mask = renderer.render_mask_at(settled_qpos, camera_extrinsic)
         combined = self._build_inference_mask(gripper_mask, base_mask)
 
@@ -308,6 +327,58 @@ def get_sharpa_mask_transform(
             gripper_dilation_kernel_size=gripper_dilation_kernel_size,
         )
     return _sharpa_mask_transform_instance
+
+
+# ---------------------------------------------------------------------------
+# UMI / YAM mask transforms. Both are parallel jaws that send a scalar
+# ``gripper_position`` (like Robotiq), so the base ``InjectGripperMask.__call__``
+# handles them directly — only the renderer differs. No subclass needed (unlike
+# Sharpa, which reads the 22-DOF hand vector).
+# ---------------------------------------------------------------------------
+
+_umi_mask_transform_instance: InjectGripperMask | None = None
+
+
+def get_umi_mask_transform(
+    *,
+    patch_masking_strategy: str | None = None,
+    gripper_dilation_kernel_size: int = 16,
+) -> InjectGripperMask:
+    """Return a shared UMI mask-inject transform (InjectGripperMask + UMI renderer)."""
+    global _umi_mask_transform_instance
+    if _umi_mask_transform_instance is None:
+        _umi_mask_transform_instance = InjectGripperMask(
+            patch_masking_strategy=patch_masking_strategy,
+            renderer_factory=get_umi_renderer,
+            gripper_dilation_kernel_size=gripper_dilation_kernel_size,
+        )
+    return _umi_mask_transform_instance
+
+
+_yam_mask_transform_instance: InjectGripperMask | None = None
+
+
+def get_yam_mask_transform(
+    *,
+    patch_masking_strategy: str | None = None,
+    gripper_dilation_kernel_size: int = 16,
+) -> InjectGripperMask:
+    """Return a shared YAM mask-inject transform (InjectGripperMask + YAM renderer).
+
+    The YAM client sends no camera params, so the cam-to-gripper extrinsic and
+    wrist intrinsic come from server-side defaults (``YAM_CAM_TO_GRIPPER`` /
+    ``YAM_WRIST_INTRINSIC_FY``).
+    """
+    global _yam_mask_transform_instance
+    if _yam_mask_transform_instance is None:
+        _yam_mask_transform_instance = InjectGripperMask(
+            patch_masking_strategy=patch_masking_strategy,
+            renderer_factory=get_yam_renderer,
+            gripper_dilation_kernel_size=gripper_dilation_kernel_size,
+            default_cam_to_gripper=YAM_CAM_TO_GRIPPER,
+            default_intrinsic_fy=YAM_WRIST_INTRINSIC_FY,
+        )
+    return _yam_mask_transform_instance
 
 
 class MaskAugmentation:

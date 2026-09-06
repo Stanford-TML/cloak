@@ -30,14 +30,21 @@ Set `CONFIG`, `EXP_NAME`, and `RLDS_DATA_DIR` at the top of `scripts/train.sh`, 
 bash scripts/train.sh
 ```
 
-Configs (`v0`/`v3` = Robotiq; `v3` adds the gripper-mask; the `_sharpa_ik` variants
-are inference-time wrappers, so train the base config):
+Trainable base configs (`v0` = baseline, no mask; `v3-1` = the full cloak method:
+majority patch-masking + training-time blob mask augmentation). The deployment
+config `..._v3-1_ik` is an inference-time wrapper over the `v3-1` checkpoint, so
+you only ever *train* the bases:
 
 - `pi05_full_droid_finetune_v0`
-- `pi05_full_droid_finetune_v3`
-- `pi05_full_droid_finetune_{v0,v3}_debug` — tiny `dummy` model + `droid_100`, no
+- `pi05_full_droid_finetune_v3-1`
+- `pi05_full_droid_finetune_{v0,v3-1}_debug` — tiny `dummy` model + `droid_100`, no
   pretrained weights, 100 steps, wandb off. A fast end-to-end smoke test (actions
   are meaningless). `train.sh` defaults to `v0_debug`.
+
+Deployment (all robots share one config; pick the robot at serve time with
+`--embodiment {robotiq,sharpa,umi,yam}` — see the main [README](README.md)):
+
+- `pi05_full_droid_finetune_v3-1_ik`
 
 For one-off overrides (batch size, steps, …) call the script directly:
 

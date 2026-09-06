@@ -130,6 +130,18 @@ YAM_GRIPPER_QPOS_CLOSED = np.array([0.0, 0.0], dtype=np.float32)
 # Robotiq/UMI wire convention for the gripper scalar: 0 = open, 1 = closed.
 GRIPPER_OPEN_SCALAR = 0.0
 
+# YAM deployment camera defaults. Unlike the Franka clients, the YAM client sends
+# no camera params, so the server renders the wrist mask from these:
+# YAM_CAM_TO_GRIPPER is the wrist cam-to-gripper 6-vec [xyz (m), euler-xyz (rad)]
+# for the real YAM rig, and YAM_WRIST_INTRINSIC_FY is the wrist focal length fy
+# (px) at RLDS 320x180 (= DEFAULT_WRIST_INTRINSICS[1] in the top-level
+# src/constants.py). YAM's per-robot cam offset relative to the DROID rig is
+# identity, so the mount is folded entirely into this extrinsic.
+YAM_CAM_TO_GRIPPER = np.array(
+    [-0.09105, 0.03311, 0.02103, *np.deg2rad([-28.50, -0.19, -90.36])]
+)
+YAM_WRIST_INTRINSIC_FY = 182.7151540905966
+
 
 # ===========================================================================
 # MuJoCo scene XML paths (single source of truth)
@@ -149,3 +161,13 @@ ROBOTIQ_SCENE_XML = _ASSETS / "franka_fr3_robotiq" / "scene.xml"
 # this geometry).
 SHARPA_FR3_XML = _ASSETS / "franka_fr3_sharpa_angled" / "fr3_sharpa_angled.xml"
 SHARPA_SCENE_XML = _ASSETS / "franka_fr3_sharpa_angled" / "scene.xml"
+
+# Franka FR3 + UMI parallel-jaw gripper (Panda hand body wearing UMI tri-finger
+# pads; mounted at -45 deg roll so its jaws co-locate with the Robotiq jaws).
+UMI_FR3_XML = _ASSETS / "franka_fr3_umi" / "fr3_umi.xml"
+UMI_SCENE_XML = _ASSETS / "franka_fr3_umi" / "scene.xml"
+
+# I2RT YAM 6-DOF arm + linear (parallel-slide) gripper. Base shifted +0.15m z so
+# the YAM tips land on the Robotiq tips at DROID_ARM_QPOS (see YAM_ARM_QPOS).
+YAM_LINEAR_XML = _ASSETS / "yam_linear" / "yam_linear.xml"
+YAM_LINEAR_SCENE_XML = _ASSETS / "yam_linear" / "scene.xml"

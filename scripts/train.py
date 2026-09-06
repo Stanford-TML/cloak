@@ -407,8 +407,10 @@ def main(config: _config.TrainConfig):
         batch = raw_batch[:2]
         seen_episodes.update(_file_paths_from_extra(raw_batch[2]))
 
+        # save_interval <= 0 disables all checkpoint saving (including the final
+        # step) — used by the debug smoke test (scripts/train_debug.sh).
         is_last_step = step == config.num_train_steps
-        if step % config.save_interval == 0 or is_last_step:
+        if config.save_interval > 0 and (step % config.save_interval == 0 or is_last_step):
             train_metadata["elapsed_seconds"] = time.time() - train_start_time + train_time_offset
             _checkpoints.save_state(
                 checkpoint_manager,

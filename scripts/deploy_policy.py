@@ -45,7 +45,7 @@ _intrinsics_cache: dict[tuple[str, str], np.ndarray] = {}
 
 
 def _short_config_name(config: str) -> str:
-    """e.g. 'pi05_full_droid_finetune_v3_sharpa_ik' -> 'v3_sharpa_ik'."""
+    """e.g. 'pi05_full_droid_finetune_v3-1_ik' -> 'v3-1_ik'."""
     if not config:
         return ""
     if "finetune_" in config:
@@ -54,9 +54,9 @@ def _short_config_name(config: str) -> str:
 
 
 def _short_checkpoint_name(checkpoint_dir: str) -> str:
-    """e.g. '.../finetune_v0/exp/10000' -> 'v0_10k';
-            '.../finetune_v3_100000'   -> 'v3_100k';
-            'gs://.../pi05_droid'      -> 'pi05_droid'."""
+    """e.g. '.../finetune_v0/exp/10000'   -> 'v0_10k';
+            '.../finetune_v3-1_100000'    -> 'v3-1_100k';
+            'gs://.../pi05_droid'         -> 'pi05_droid'."""
     if not checkpoint_dir:
         return ""
     parts = checkpoint_dir.rstrip("/").split("/")
@@ -68,7 +68,7 @@ def _short_checkpoint_name(checkpoint_dir: str) -> str:
     step = int(m.group(1))
     step_str = f"{step // 1000}k" if step >= 1000 and step % 1000 == 0 else str(step)
     # Version = portion after 'finetune_' in any path component, with any trailing
-    # '_<step>' stripped off (covers single-dir layouts like '.../finetune_v3_100000').
+    # '_<step>' stripped off (covers single-dir layouts like '.../finetune_v3-1_100000').
     version = ""
     for p in parts:
         if "finetune_" in p:

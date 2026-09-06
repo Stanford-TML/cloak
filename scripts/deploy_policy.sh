@@ -8,8 +8,9 @@ set -euo pipefail
 # to test the client↔server loop against a running server. "false" for real robots.
 DEBUG=true
 
-# Which robot to drive: "sharpa" (arm + Sharpa hand) or "robotiq" (arm + Robotiq
-# gripper). Must match the served checkpoint's embodiment.
+# Which robot to drive. Must match the server's --embodiment (robotiq | sharpa |
+# umi | yam). "robotiq"/"sharpa" have client robot envs in this repo's droid/;
+# umi/yam additionally require their client-side robot env.
 EMBODIMENT=sharpa
 
 # Rollout length cap; 0 = run until Ctrl+C (900 ≈ 1 minute at 15 Hz).

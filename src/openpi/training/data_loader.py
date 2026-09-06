@@ -205,7 +205,13 @@ def create_rlds_data_loader(
         skip_batches: Number of batches to skip at the start of the pipeline (for resume).
     """
     dataset = create_rlds_dataset(
-        data_config, action_horizon, batch_size, shuffle=shuffle, seed=seed, skip_batches=skip_batches
+        data_config,
+        action_horizon,
+        batch_size,
+        shuffle=shuffle,
+        seed=seed,
+        skip_batches=skip_batches,
+        shuffle_buffer_size=data_config.shuffle_buffer_size,
     )
     dataset = transform_iterable_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats, is_batched=True)
 

@@ -1,0 +1,32 @@
+<!-- Adapted from google-deepmind/mujoco_menagerie/franka_emika_panda/hand.xml (Apache 2.0).
+     Finger meshes (tri_finger.obj, tri_finger_14cm.obj) are the UMI compliant tri-finger pads
+     from Ericcsr/ARCap (data_processing/assets/gripper). -->
+<mujoco model="panda_hand_umi">
+    <!-- The panda hand's roll on the FR3 wrist differs from the Robotiq mount by 135 deg.
+         Net roll around Z is 180 deg (menagerie's quat="0 0 0 1") + 135 deg = 315 deg = -45 deg. -->
+    <body name="panda_hand" pos="0 0 0.107" euler="0 0 -0.7854" childclass="panda" gravcomp="1">
+        <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
+        <geom mesh="hand_0" material="off_white" class="panda_visual"/>
+        <geom mesh="hand_1" material="black"     class="panda_visual"/>
+        <geom mesh="hand_2" material="black"     class="panda_visual"/>
+        <geom mesh="hand_3" material="white"     class="panda_visual"/>
+        <geom mesh="hand_4" material="off_white" class="panda_visual"/>
+        <geom mesh="hand_c" class="panda_collision"/>
+
+        <body name="left_finger" pos="0 0 0.0584" gravcomp="1">
+            <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
+            <joint name="finger_joint1" class="panda_finger"/>
+            <geom mesh="tri_finger" material="off_white" rgba="0.901961 0.921569 0.929412 1" class="panda_visual"/>
+            <geom mesh="tri_finger_c" class="panda_collision"/>
+            <site name="left_gripper_site" pos="0 0 0.14"/>
+        </body>
+
+        <body name="right_finger" pos="0 0 0.0584" quat="0 0 0 1" gravcomp="1">
+            <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
+            <joint name="finger_joint2" class="panda_finger"/>
+            <geom mesh="tri_finger" material="off_white" rgba="0.901961 0.921569 0.929412 1" class="panda_visual"/>
+            <geom mesh="tri_finger_c" class="panda_collision"/>
+            <site name="right_gripper_site" pos="0 0 0.14"/>
+        </body>
+    </body>
+</mujoco>

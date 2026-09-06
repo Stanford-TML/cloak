@@ -526,10 +526,16 @@ class SharpaIKTransform(_transforms.DataTransformFn):
             g = 0.0
         return g
 
-    def compute_sharpa_affordance(
+    def compute_target_affordance(
         self, arm_qpos: np.ndarray, hand_qpos: np.ndarray
     ) -> np.ndarray:
-        """Sharpa FK -> ``[middle, thumb]`` fingertip xyz (2, 3), base frame."""
+        """Embodiment FK -> the two ``[left, right]`` IK-target xyz (2, 3), base frame.
+
+        This (Sharpa) base impl maps the 22-DOF hand to ``[middle, thumb]``
+        fingertips. UMI/YAM override it to read a scalar gripper and return their
+        ``[left, right]`` gripper sites, so the shared ``SharpaToRobotiqRewrite``
+        needs no per-embodiment ``__call__`` override.
+        """
         arm_qpos = arm_qpos.squeeze()[: self._arm_dof]
         hand_qpos = hand_qpos.squeeze()[: self._hand_dof]
         with self._lock:
@@ -541,6 +547,18 @@ class SharpaIKTransform(_transforms.DataTransformFn):
             middle_pos = self._ik_data.site("middle_fingertip").xpos.copy()
             thumb_pos = self._ik_data.site("thumb_fingertip").xpos.copy()
         return np.stack([middle_pos, thumb_pos], axis=0)
+
+    def compute_g(
+        self, target_left: np.ndarray, target_right: np.ndarray, hand: np.ndarray | None = None
+    ) -> float:
+        """Robotiq gripper [0, 1] for ``solve_robotiq``.
+
+        This (Sharpa) base impl derives it from the affordance L/R separation.
+        UMI/YAM override to return the client's true gripper scalar directly.
+        """
+        return self._robotiq_gripper_value_from_separation(
+            float(np.linalg.norm(target_left - target_right))
+        )
 
     def _init_robotiq_last_q(self) -> None:
         """Seed the reverse-IK warm-start + posture target to DROID rest (first call)."""
@@ -556,19 +574,19 @@ class SharpaIKTransform(_transforms.DataTransformFn):
         target_right: np.ndarray,
         *,
         attachment_quat: np.ndarray | None = None,
+        g: float = 0.0,
     ) -> tuple[np.ndarray, float]:
         """Robotiq IK fitting the L/R gripper sites to two 3D points.
 
-        Gripper opening comes from the affordance separation (fingers locked to
-        the lerp); the arm is solved by position-only mink IK, warm-started across
-        calls. Returns ``(arm_qpos[7], gripper_value)``.
+        Gripper opening ``g`` comes from ``compute_g`` (Sharpa: affordance
+        separation; UMI/YAM: the true client gripper scalar). Fingers are locked
+        to the lerp; the arm is solved by position-only mink IK, warm-started
+        across calls. Returns ``(arm_qpos[7], gripper_value)``.
         """
         assert attachment_quat is not None, "attachment_quat is required to set the IK target orientation"
 
         target_left = target_left.squeeze()
         target_right = target_right.squeeze()
-        sep = float(np.linalg.norm(target_left - target_right))
-        g = self._robotiq_gripper_value_from_separation(sep)
         finger_qpos = lerp_gripper_qpos(g)
 
         T_left = mink.SE3.from_rotation_and_translation(rotation=SO3.identity(), translation=target_left)
@@ -692,9 +710,17 @@ class SharpaToRobotiqRewrite(_transforms.DataTransformFn):
     Per obs: Sharpa FK -> affordance -> Robotiq IK; overwrite
     ``observation/{joint_position, gripper_position, affordance_pos}``.
 
-    No-op if ``observation/hand_joint_position`` is missing (e.g., training data
-    or vanilla Robotiq clients).
+    No-op if ``observation/joint_position`` or the hand key is missing (e.g.,
+    training data or vanilla Robotiq clients).
+
+    Embodiment-generic: the per-robot logic lives in the IK transform's
+    ``compute_target_affordance`` / ``compute_g``, so UMI/YAM only set
+    ``_SECONDARY_LABEL`` + ``hand_input_key`` and point ``_get_ik_transform`` at
+    their singleton — no ``__call__`` override.
     """
+
+    # Display label in the log line; subclasses override (UMI/YAM).
+    _SECONDARY_LABEL: str = "Sharpa"
 
     def __init__(
         self,
@@ -709,30 +735,39 @@ class SharpaToRobotiqRewrite(_transforms.DataTransformFn):
         return get_ik_transform()
 
     def __call__(self, data: dict) -> dict:
-        hand = data.get(self._hand_input_key, None)
         arm = data.get("observation/joint_position", None)
-        assert arm is not None, "Expected 'observation/joint_position' in data"
-        assert hand is not None, f"Expected '{self._hand_input_key}' in data"
+        ee = data.get(self._hand_input_key, None)
+        if arm is None or ee is None:
+            return data  # no-op (training data / vanilla Robotiq client)
 
         ik = self._get_ik_transform()
-        arm_np = np.asarray(arm, dtype=np.float64).reshape(-1)[: ik._arm_dof]
-        hand_np = np.asarray(hand, dtype=np.float64).reshape(-1)[: ik._hand_dof]
+        arm = np.asarray(arm, dtype=np.float64).reshape(-1)[: ik._arm_dof]
+        ee = np.asarray(ee, dtype=np.float64).reshape(-1)[: ik._hand_dof]
 
-        affordance = ik.compute_sharpa_affordance(arm_np, hand_np)  # (2, 3)
-        attachment_quat = ik._read_attachment_quat()
+        affordance = ik.compute_target_affordance(arm, ee)  # (2, 3)
         arm_rq, gripper = ik.solve_robotiq(
-            affordance[0], affordance[1], attachment_quat=attachment_quat
+            affordance[0],
+            affordance[1],
+            attachment_quat=ik._read_attachment_quat(),
+            g=ik.compute_g(affordance[0], affordance[1], ee),
         )
 
         if not self._logged_first_call:
             self._logged_first_call = True
             sep = float(np.linalg.norm(affordance[0] - affordance[1]))
+            # |Δarm| is only meaningful when the secondary arm is also 7-DOF
+            # (Sharpa/UMI); skip it for the 6-DOF YAM arm.
+            extra = (
+                f", |Δarm vs observed|={np.linalg.norm(arm - arm_rq):.3f}rad"
+                if arm.shape[0] == arm_rq.shape[0]
+                else ""
+            )
             logger.info(
-                "Sharpa->Robotiq input rewrite active — affordance |L-R|=%.4fm -> "
-                "gripper=%.3f, |Δarm vs observed|=%.3frad",
+                "%s->Robotiq input rewrite active — affordance |L-R|=%.4fm -> gripper=%.3f%s",
+                self._SECONDARY_LABEL,
                 sep,
                 gripper,
-                float(np.linalg.norm(arm_np - arm_rq)),
+                extra,
             )
 
         return {
