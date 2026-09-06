@@ -1,19 +1,89 @@
 [project]
-name = "cloak-extrinsics"
+name = "cloak"
 version = "0.1.0"
-description = "Silhouette-calibrated DROID wrist extrinsics: data + reference code."
+description = "Cloak: policy-serving / inference infrastructure + calibrated DROID wrist extrinsics."
+readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "numpy==1.26.4",
-    "scipy==1.17.1",
+    # --- JAX policy-serving (inference) core ---
+    "jax[cuda12]==0.6.2",
+    "jaxtyping==0.2.36",
+    "flax==0.10.2",
+    "einops>=0.8.0",
+    "augmax>=0.3.4",
+    "orbax-checkpoint==0.11.13",
+    "numpydantic>=1.6.6",
+    "sentencepiece>=0.2.0",
+    "beartype==0.19.0",
+    "fsspec[gcs]>=2024.6.0",
+    "filelock>=3.16.1",
+    "tqdm-loggable>=0.2",
+    "tyro>=0.9.5",
+    "typing-extensions>=4.12.2",
+    # --- robotics / IK / mask rendering ---
     "mujoco==3.6.0",
-    "opencv-python-headless==4.11.0.86",
+    "mink>=1.0.0",
+    # contrib variant (superset of -headless) so the client's calibration code can
+    # `from cv2 import aruco`; shared by the server's mask renderer (plain cv2).
+    "opencv-contrib-python-headless==4.11.0.86",
+    # --- shared / robot-facing client (openpi_client wire protocol, in src/) ---
+    "numpy>=1.22.4,<2.0.0",
+    "pillow>=11.0.0",
+    "dm-tree>=0.1.8",
+    "msgpack>=1.0.5",
+    "websockets>=11.0",
+    # --- DROID wrist-extrinsics regeneration (reads DROID via TF-datasets) ---
+    "scipy==1.17.1",
     "tensorflow-cpu==2.15.0",
     "tensorflow-datasets==4.9.9",
     "tensorflow-metadata==1.17.3",
-    "pillow==12.2.0",
-    "tyro",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.8.6",
+    "matplotlib>=3.10.0",
+]
+# Robot-side deploy client (scripts/deploy_policy.py + vendored droid/ env).
+# Runs on the robot workstation via `uv run --group client python scripts/deploy_policy.py`.
+# NOTE: pyzed (ZED SDK), the Sharpa hand SDK (vendored under SharpaWaveSDK_4.3.4/,
+# added to sys.path at runtime), and the Franka control API are hardware/driver
+# packages installed on the robot workstation — intentionally NOT listed here.
+client = [
+    "zerorpc>=0.6.3",
+    "gym>=0.26.2",
+    "moviepy>=1.0.3",
+    "matplotlib>=3.10.0",
+    "tqdm>=4.66.0",
+]
+# JAX training (scripts/train.py + compute_norm_stats.py). The RLDS/TF data deps
+# are already in the base install; this group adds the train-loop extras.
+# Run via `uv run --group train python scripts/train.py <config>`.
+train = [
+    "wandb>=0.19.1",
+    "optax>=0.2.8",
+    "etils>=1.14.0",
+    "psutil>=7.0.0",
+    "dlimp",  # DROID RLDS helpers; git source below.
 ]
 
 [tool.uv]
-package = false
+override-dependencies = [
+    "ml-dtypes==0.5.0",   # jax 0.6.2 needs >=0.5.0; overrides tensorflow-cpu 2.15's lower pin
+    "tensorstore==0.1.74",
+]
+
+[tool.uv.sources]
+dlimp = { git = "https://github.com/kvablack/dlimp", rev = "ad72ce3a9b414db2185bc0b38461d4101a65477a" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openpi", "src/openpi_client"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

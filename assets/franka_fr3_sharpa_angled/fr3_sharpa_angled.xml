@@ -1,0 +1,328 @@
+<mujoco model="fr3">
+  <compiler angle="radian" meshdir="meshes"/>
+
+  <option integrator="implicitfast"/>
+
+  <default>
+    <default class="fr3">
+      <!-- Overwritten in joints 5, 6, and 7. -->
+      <joint damping="0.21" armature="0.195" frictionloss="1.137" actuatorgravcomp="true"/>
+      <position inheritrange="1"/>
+      <default class="visual">
+        <geom type="mesh" group="2" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom type="mesh" group="3" mass="0" density="0"/>
+      </default>
+      <!-- <site size="0.001" rgba="0.5 0.5 0.5 0.3" group="4"/> -->
+    </default>
+
+    <default class="sharpa">
+    </default>
+
+    <default class="CMC_joint">
+      <joint armature="0.0032" frictionloss="0.132" damping="4.20E-05" actuatorgravcomp="true"/>
+    </default>
+    <default class="PCMC_joint">
+      <joint armature="0.00012" frictionloss="0.012" damping="4.20E-05" actuatorgravcomp="true"/>
+    </default>
+    <default class="MCP_joint">
+      <joint armature="0.00265" frictionloss="0.07456" damping="2.38E-05" actuatorgravcomp="true"/>
+    </default>
+    <default class="PIP_joint">
+      <joint armature="0.0006" frictionloss="0.01276"  damping="4.06E-06" actuatorgravcomp="true"/>
+    </default>
+    <default class="DIP_joint">
+      <joint armature="0.00042" frictionloss="0.00378738"  damping="1.21E-06" actuatorgravcomp="true"/>
+    </default>
+    <default class="elastomer_geom">
+      <!-- Michael - this solref reduces stiffness and introduces object penetration. Makes optimizing the grasp reward slightly more unstable. So turn it off. -->
+      <!-- <geom solref="0.06 0.9"/> -->
+    </default>
+  </default>
+
+  <asset>
+    <material name="black" rgba=".2 .2 .2 0.5"/>
+    <material name="white" rgba="1 1 1 0.5"/>
+    <material name="red" rgba="1 0.072272 0.039546 1"/>
+    <material name="gray" rgba="0.863156 0.863156 0.863157 1"/>
+    <material name="button_green" rgba="0.102241 0.571125 0.102242 1"/>
+    <material name="button_red" rgba="0.520996 0.008023 0.013702 1"/>
+    <material name="button_blue" rgba="0.024157 0.445201 0.737911 1"/>
+
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+    <mesh file="link0_0.obj"/>
+    <mesh file="link0_1.obj"/>
+    <mesh file="link0_2.obj"/>
+    <mesh file="link0_3.obj"/>
+    <mesh file="link0_4.obj"/>
+    <mesh file="link0_5.obj"/>
+    <mesh file="link0_6.obj"/>
+    <mesh file="link1.obj"/>
+    <mesh file="link2.obj"/>
+    <mesh file="link3_0.obj"/>
+    <mesh file="link3_1.obj"/>
+    <mesh file="link4_0.obj"/>
+    <mesh file="link4_1.obj"/>
+    <mesh file="link5_0.obj"/>
+    <mesh file="link5_1.obj"/>
+    <mesh file="link5_2.obj"/>
+    <mesh file="link6_0.obj"/>
+    <mesh file="link6_1.obj"/>
+    <mesh file="link6_2.obj"/>
+    <mesh file="link6_3.obj"/>
+    <mesh file="link6_4.obj"/>
+    <mesh file="link6_5.obj"/>
+    <mesh file="link6_6.obj"/>
+    <mesh file="link6_7.obj"/>
+    <mesh file="link7_0.obj"/>
+    <mesh file="link7_1.obj"/>
+    <mesh file="link7_2.obj"/>
+    <mesh file="link7_3.obj"/>
+
+    <mesh name="link0_coll" file="link0.stl"/>
+    <mesh name="link1_coll" file="link1.stl"/>
+    <mesh name="link2_coll" file="link2.stl"/>
+    <mesh name="link3_coll" file="link3.stl"/>
+    <mesh name="link4_coll" file="link4.stl"/>
+    <mesh name="link5_coll" file="link5.stl"/>
+    <mesh name="link6_coll" file="link6.stl"/>
+    <mesh name="link7_coll" file="link7.stl"/>
+
+    <!-- Angled mount -->
+    <mesh name="sharpa_mount_franka_right" file="sharpa_mount_franka_right.stl"/>
+    <mesh name="sharpa_mount_franka_right_visual" file="sharpa_mount_franka_right.stl"/>
+
+    <!-- Straight mount -->
+    <mesh name="sharpa_mount_flat_part1" file="sharpa_mount_franka_flat_part1.1.stl"/>
+    <mesh name="sharpa_mount_flat_part1_visual" file="sharpa_mount_franka_flat_part1.1.stl"/>
+    <mesh name="sharpa_mount_flat_part2" file="sharpa_mount_franka_flat_part2.1.stl"/>
+    <mesh name="sharpa_mount_flat_part2_visual" file="sharpa_mount_franka_flat_part2.1.stl"/>
+
+    <mesh name="right_hand_C_MC_visual" file="right_hand_C_MC_visual_.STL"/>
+    <mesh name="right_hand_C_MC" file="right_hand_C_MC.STL"/>
+    <mesh name="right_thumb_CMC_VL_visual" file="right_thumb_CMC_VL_visual.STL"/>
+    <mesh name="right_thumb_MC_visual" file="right_thumb_MC_visual.STL"/>
+    <mesh name="right_thumb_MC" file="right_thumb_MC.STL"/>
+    <mesh name="right_thumb_MCP_VL_visual" file="right_thumb_MCP_VL_visual.STL"/>
+    <mesh name="right_thumb_PP_visual" file="right_thumb_PP_visual.STL"/>
+    <mesh name="right_thumb_PP" file="right_thumb_PP.STL"/>
+    <mesh name="right_thumb_DP_visual" file="right_thumb_DP_visual.STL"/>
+    <mesh name="right_thumb_DP" file="right_thumb_DP_visual.STL"/>
+    <mesh name="thumb_elastomer" file="thumb_elastomer.STL"/>
+    <mesh name="right_MCP_VL_visual" file="right_MCP_VL_visual.STL"/>
+    <mesh name="MCP_VL" file="MCP_VL.STL"/>
+    <mesh name="right_PP_visual" file="right_PP_visual.STL"/>
+    <mesh name="right_PP" file="right_PP.STL"/>
+    <mesh name="right_MP_visual" file="right_MP_visual.STL"/>
+    <mesh name="right_MP" file="right_MP.STL"/>
+    <mesh name="right_DP_visual" file="right_DP_visual.STL"/>
+    <mesh name="right_DP" file="right_DP_visual.STL"/>
+    <mesh name="elastomer" file="elastomer.STL"/>
+    <mesh name="right_pinky_MC_visual" file="right_pinky_MC_visual.STL"/>
+    <mesh name="right_pinky_MC" file="right_pinky_MC.STL"/>
+  </asset>
+
+  <worldbody>
+    <body name="fr3_link0" childclass="fr3" pos="0 0 0" gravcomp="1">
+        <geom mesh="link0_0" material="black" class="visual"/>
+        <geom mesh="link0_1" material="white" class="visual"/>
+        <geom mesh="link0_2" material="white" class="visual"/>
+        <geom mesh="link0_3" material="white" class="visual"/>
+        <geom mesh="link0_4" material="white" class="visual"/>
+        <geom mesh="link0_5" material="red" class="visual"/>
+        <geom mesh="link0_6" material="black" class="visual"/>
+        <geom name="fr3_link0_collision" mesh="link0_coll" class="collision"/>
+        <body name="fr3_link1" pos="0 0 0.333" gravcomp="1">
+          <inertial pos="4.128e-07 -0.0181251 -0.0386036" quat="0.998098 -0.0605364 0.00380499 0.0110109" mass="2.92747"
+            diaginertia="0.0239286 0.0227246 0.00610634"/>
+          <joint name="fr3_joint1" axis="0 0 1" range="-2.7437 2.7437" actuatorfrcrange="-87 87" actuatorgravcomp="true"/>
+          <geom name="fr3_link1_collision" class="collision" mesh="link1_coll"/>
+          <geom material="white" mesh="link1" class="visual"/>
+          <body name="fr3_link2" quat="1 -1 0 0" gravcomp="1">
+            <inertial pos="0.00318289 -0.0743222 0.00881461" quat="0.502599 0.584437 -0.465998 0.434366" mass="2.93554"
+              diaginertia="0.0629567 0.0411924 0.0246371"/>
+            <joint name="fr3_joint2" axis="0 0 1" range="-1.7837 1.7837" actuatorfrcrange="-87 87" actuatorgravcomp="true"/>
+            <geom material="white" mesh="link2" class="visual"/>
+            <geom name="fr3_link2_collision" class="collision" mesh="link2_coll"/>
+            <body name="fr3_link3" pos="0 -0.316 0" quat="1 1 0 0" gravcomp="1">
+              <inertial pos="0.0407016 -0.00482006 -0.0289731" quat="0.921025 -0.244161 0.155272 0.260745" mass="2.2449"
+                diaginertia="0.0267409 0.0189869 0.0171587"/>
+              <joint name="fr3_joint3" axis="0 0 1" range="-2.9007 2.9007" actuatorfrcrange="-87 87" actuatorgravcomp="true"/>
+              <geom mesh="link3_0" material="white" class="visual"/>
+              <geom mesh="link3_1" material="black" class="visual"/>
+              <geom name="fr3_link3_collision" class="collision" mesh="link3_coll"/>
+              <body name="fr3_link4" pos="0.0825 0 0" quat="1 1 0 0" gravcomp="1">
+                <inertial pos="-0.0459101 0.0630493 -0.00851879" quat="0.438018 0.803311 0.00937812 0.403414"
+                  mass="2.6156" diaginertia="0.05139 0.0372717 0.0160047"/>
+                <joint name="fr3_joint4" axis="0 0 1" range="-3.0421 -0.1518" actuatorfrcrange="-87 87" actuatorgravcomp="true"/>
+                <geom mesh="link4_0" material="white" class="visual"/>
+                <geom mesh="link4_1" material="black" class="visual"/>
+                <geom name="fr3_link4_collision" class="collision" mesh="link4_coll"/>
+                <body name="fr3_link5" pos="-0.0825 0.384 0" quat="1 -1 0 0" gravcomp="1">
+                  <inertial pos="-0.00160396 0.0292536 -0.0972966" quat="0.919031 0.125604 0.0751531 -0.366003"
+                    mass="2.32712" diaginertia="0.0579335 0.0449144 0.0130634"/>
+                  <joint name="fr3_joint5" axis="0 0 1" range="-2.8065 2.8065" actuatorfrcrange="-12 12"
+                    armature="0.074" frictionloss="0.763" actuatorgravcomp="true"/>
+                  <geom mesh="link5_0" material="white" class="visual"/>
+                  <geom mesh="link5_1" material="white" class="visual"/>
+                  <geom mesh="link5_2" material="black" class="visual"/>
+                  <geom name="fr3_link5_collision" class="collision" mesh="link5_coll"/>
+                  <body name="fr3_link6" quat="1 1 0 0" gravcomp="1">
+                    <inertial pos="0.0597131 -0.0410295 -0.0101693" quat="0.621301 0.552665 0.510011 0.220081"
+                      mass="1.81704" diaginertia="0.0175039 0.0161123 0.00193529"/>
+                    <joint name="fr3_joint6" axis="0 0 1" range="0.5445 4.5169" actuatorfrcrange="-12 12"
+                      armature="0.074" frictionloss="0.44" actuatorgravcomp="true"/>
+                    <geom mesh="link6_0" material="button_green" class="visual"/>
+                    <geom mesh="link6_1" material="white" class="visual"/>
+                    <geom mesh="link6_2" material="white" class="visual"/>
+                    <geom mesh="link6_3" material="gray" class="visual"/>
+                    <!-- <geom mesh="link6_4" material="button_red" class="visual"/> -->
+                    <geom mesh="link6_5" material="white" class="visual"/>
+                    <geom mesh="link6_6" material="black" class="visual"/>
+                    <geom mesh="link6_7" material="button_blue" class="visual"/>
+                    <geom name="fr3_link6_collision" class="collision" mesh="link6_coll"/>
+                    <body name="fr3_link7" pos="0.088 0 0" quat="1 1 0 0" gravcomp="1">
+                      <inertial pos="0.00452258 0.00862619 -0.0161633" quat="0.727579 0.0978688 -0.24906 0.63168"
+                        mass="0.627143" diaginertia="0.000223836 0.000223642 5.64132e-07"/>
+                      <joint name="fr3_joint7" axis="0 0 1" range="-3.0159 3.0159" actuatorfrcrange="-12 12"
+                        armature="0.074" frictionloss="0.248" actuatorgravcomp="true"/>
+                      <geom mesh="link7_0" material="black" class="visual"/>
+                      <geom mesh="link7_1" material="white" class="visual"/>
+                      <geom mesh="link7_2" material="white" class="visual"/>
+                      <geom mesh="link7_3" material="black" class="visual"/>
+                      <geom name="fr3_link7_collision" class="collision" mesh="link7_coll"/>
+                      <site name="attachment_site" pos="0 0 0.107" size="0.001" rgba="0.5 0.5 0.5 0.3" />
+
+                      <!-- For no roll on the end effector -->
+                       <frame euler="0 0 0">
+                        <include file="right_sharpa_ha4_v2_1.xml"></include>
+                       </frame>
+                      
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <!-- 3 different options for pd gains. The low and medium gains work best what gravcomp=1 on all the bodies. The high gains should be used if you turn off gravcomp -->
+
+    <!-- <position class="fr3" name="fr3_joint1" joint="fr3_joint1" kp="40" kv="4"/>
+    <position class="fr3" name="fr3_joint2" joint="fr3_joint2" kp="30" kv="6"/>
+    <position class="fr3" name="fr3_joint3" joint="fr3_joint3" kp="50" kv="5"/>
+    <position class="fr3" name="fr3_joint4" joint="fr3_joint4" kp="25" kv="5"/>
+    <position class="fr3" name="fr3_joint5" joint="fr3_joint5" kp="35" kv="3"/>
+    <position class="fr3" name="fr3_joint6" joint="fr3_joint6" kp="25" kv="2"/>
+    <position class="fr3" name="fr3_joint7" joint="fr3_joint7" kp="10" kv="1"/> -->
+
+    <position class="fr3" name="fr3_joint1" joint="fr3_joint1" kp="400" kv="40" />
+    <position class="fr3" name="fr3_joint2" joint="fr3_joint2" kp="300" kv="60" />
+    <position class="fr3" name="fr3_joint3" joint="fr3_joint3" kp="500" kv="50" />
+    <position class="fr3" name="fr3_joint4" joint="fr3_joint4" kp="250" kv="50" />
+    <position class="fr3" name="fr3_joint5" joint="fr3_joint5" kp="350" kv="30" />
+    <position class="fr3" name="fr3_joint6" joint="fr3_joint6" kp="250" kv="20" />
+    <position class="fr3" name="fr3_joint7" joint="fr3_joint7" kp="100" kv="10" />
+
+    <!-- <position class="fr3" name="fr3_joint1" joint="fr3_joint1" kp="4500" kv="450" />
+    <position class="fr3" name="fr3_joint2" joint="fr3_joint2" kp="4500" kv="450" />
+    <position class="fr3" name="fr3_joint3" joint="fr3_joint3" kp="3500" kv="350" />
+    <position class="fr3" name="fr3_joint4" joint="fr3_joint4" kp="3500" kv="350" />
+    <position class="fr3" name="fr3_joint5" joint="fr3_joint5" kp="2000" kv="200" />
+    <position class="fr3" name="fr3_joint6" joint="fr3_joint6" kp="2000" kv="200" />
+    <position class="fr3" name="fr3_joint7" joint="fr3_joint7" kp="2000" kv="200" /> -->
+
+    <!-- Michael - set forcerange to match torque limits in URDF. Enforces hardware torque limits on the actuator side (before transmission) -->
+    <position name="right_thumb_CMC_FE_ctrl" joint="right_thumb_CMC_FE"  kp="6.95" dampratio="0.9"  inheritrange="1.0"/>
+    <position name="right_thumb_CMC_AA_ctrl" joint="right_thumb_CMC_AA"  kp="13.2" dampratio="0.9"  inheritrange="1.0"/>
+    <position name="right_thumb_MCP_FE_ctrl" joint="right_thumb_MCP_FE"  kp="4.76" dampratio="0.9" inheritrange="1.0"/>
+    <position name="right_thumb_MCP_AA_ctrl" joint="right_thumb_MCP_AA" kp="6.62" dampratio="0.9" inheritrange="1.0"/>
+    <position name="right_thumb_IP_ctrl" joint="right_thumb_IP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_index_MCP_FE_ctrl" joint="right_index_MCP_FE" kp="4.76" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_index_MCP_AA_ctrl" joint="right_index_MCP_AA" kp="6.62" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_index_PIP_ctrl" joint="right_index_PIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_index_DIP_ctrl" joint="right_index_DIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+
+    <position name="right_middle_MCP_FE_ctrl" joint="right_middle_MCP_FE" kp="4.76" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_middle_MCP_AA_ctrl" joint="right_middle_MCP_AA" kp="6.62" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_middle_PIP_ctrl" joint="right_middle_PIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_middle_DIP_ctrl" joint="right_middle_DIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_ring_MCP_FE_ctrl" joint="right_ring_MCP_FE" kp="4.76" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_ring_MCP_AA_ctrl" joint="right_ring_MCP_AA" kp="6.62" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_ring_PIP_ctrl" joint="right_ring_PIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_ring_DIP_ctrl" joint="right_ring_DIP" kp="0.9" dampratio="0.9" inheritrange="1.0"/>
+    <position name="right_pinky_CMC_ctrl" joint="right_pinky_CMC" kp="1.38" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_pinky_MCP_FE_ctrl" joint="right_pinky_MCP_FE" kp="4.76" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_pinky_MCP_AA_ctrl" joint="right_pinky_MCP_AA" kp="6.62" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_pinky_PIP_ctrl" joint="right_pinky_PIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+    <position name="right_pinky_DIP_ctrl" joint="right_pinky_DIP" kp="0.9" dampratio="0.9" inheritrange="1.0" />
+  </actuator>
+
+  <contact>
+    <exclude body1="fr3_link0" body2="fr3_link1"/>
+
+    <exclude body1="right_hand_C_MC" body2="right_thumb_CMC_VL"/>
+    <exclude body1="right_hand_C_MC" body2="right_hand_C_MC"/>
+    <exclude body1="right_hand_C_MC" body2="right_thumb_MC"/>
+    <exclude body1="right_thumb_MC" body2="right_thumb_MCP_VL"/>
+    <exclude body1="right_thumb_MC" body2="right_thumb_PP"/>
+    <exclude body1="right_thumb_MCP_VL" body2="right_thumb_PP"/>
+    <exclude body1="right_thumb_PP" body2="right_thumb_DP"/>
+    <exclude body1="right_hand_C_MC" body2="right_index_MCP_VL"/>
+    <exclude body1="right_hand_C_MC" body2="right_index_PP"/>
+    <exclude body1="right_index_MCP_VL" body2="right_index_PP"/>
+    <exclude body1="right_index_PP" body2="right_index_MP"/>
+    <exclude body1="right_index_MP" body2="right_index_DP"/>
+    <exclude body1="right_hand_C_MC" body2="right_middle_MCP_VL"/>
+    <exclude body1="right_hand_C_MC" body2="right_middle_PP"/>
+    <exclude body1="right_middle_MCP_VL" body2="right_middle_PP"/>
+    <exclude body1="right_middle_PP" body2="right_middle_MP"/>
+    <exclude body1="right_middle_MP" body2="right_middle_DP"/>
+    <exclude body1="right_hand_C_MC" body2="right_ring_MCP_VL"/>
+    <exclude body1="right_hand_C_MC" body2="right_ring_PP"/>
+    <exclude body1="right_ring_MCP_VL" body2="right_ring_PP"/>
+    <exclude body1="right_ring_PP" body2="right_ring_MP"/>
+    <exclude body1="right_ring_MP" body2="right_ring_DP"/>
+    <exclude body1="right_hand_C_MC" body2="right_pinky_MC"/>
+    <exclude body1="right_pinky_MC" body2="right_pinky_MCP_VL"/>
+    <exclude body1="right_pinky_MC" body2="right_pinky_PP"/>
+    <exclude body1="right_pinky_MCP_VL" body2="right_pinky_PP"/>
+    <exclude body1="right_pinky_PP" body2="right_pinky_MP"/>
+    <exclude body1="right_pinky_MP" body2="right_pinky_DP"/>
+  </contact>
+
+  <keyframe>
+    <!-- <key name="home"
+      qpos="
+        0 0 0 -1.57079 0 1.57079 0
+        0 0 0 0 0
+        0 0 0 0
+        0 0 0 0
+        0 0 0 0
+        0 0 0 0 0
+      " 
+      ctrl="
+        0 0 0 -1.57079 0 1.57079 0
+      " /> -->
+
+    <key name="home"
+      qpos="
+        0 0 0 -1.57079 0 1.57079 0
+        0 0 0 0 0
+        0 0 0 0
+        0 0 0 0
+        0 0 0 0
+        0 0 0 0 0
+      "
+      ctrl="
+        0 0 0 -1.57079 0 1.57079 0
+      " />
+  </keyframe>
+</mujoco>
