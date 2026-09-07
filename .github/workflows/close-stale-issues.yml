@@ -1,0 +1,58 @@
+name: Close issues awaiting author response
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  close-awaiting-response:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const DAYS = 7;
+            const cutoff = Date.now() - DAYS * 24 * 60 * 60 * 1000;
+            // Comment authors whose reply starts the countdown (the maintainer side).
+            const MAINTAINER = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+              if (comments.length === 0) continue;
+
+              const last = comments[comments.length - 1];
+              if (!MAINTAINER.has(last.author_association)) continue;
+              if (new Date(last.created_at).getTime() > cutoff) continue;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Automatically closed after ${DAYS} days with no response. Reopen if this still needs attention.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'not_planned',
+              });
+            }
