@@ -46,8 +46,8 @@ import tyro
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from openpi.constants import DEFAULT_CAM_TO_GRIPPER, DEFAULT_WRIST_INTRINSICS, lerp_gripper_qpos  # noqa: E402
-from utils import file_path_to_lang_key, find_dataset_dir, parse_lab  # noqa: E402
+from openpi.constants import DEFAULT_CAM_TO_GRIPPER, DEFAULT_WRIST_INTRINSICS, RLDS_H, RLDS_W, WRIST_CAM_KEY, lerp_gripper_qpos  # noqa: E402
+from utils import decode_camera_frames, file_path_to_lang_key, find_dataset_dir, parse_lab  # noqa: E402
 
 from openpi.constants import YAM_GRIPPER_QPOS_CLOSED  # noqa: E402
 from openpi.constants import YAM_GRIPPER_QPOS_OPEN  # noqa: E402
@@ -64,9 +64,6 @@ from openpi.constants import YAM_LINEAR_SCENE_XML as YAM_XML  # noqa: E402
 
 # DROID data is recorded at 15 Hz.
 DATA_FREQ = 15.0
-
-# Wrist image resolution in the RLDS dataset.
-RLDS_H, RLDS_W = 180, 320
 
 _GRIPPER_BODY_NAMES = [
     "base_mount",
@@ -150,8 +147,6 @@ _GRIPPER_BODY_NAMES_YAM = [
 ]
 _GRIPPER_BASE_NAMES_YAM: list[str] = []
 
-WRIST_CAM_KEY = "wrist_image_left"
-
 # Robots whose gripper mask is rendered into every episode. Robotiq keeps the
 # legacy key (empty suffix) so existing dataloaders/configs/trained runs are
 # unaffected; UMI/Sharpa get a `_<robot>` suffix. Only Robotiq produces the
@@ -166,10 +161,6 @@ def _mask_key(robot: str) -> str:
     return f"{WRIST_CAM_KEY}_gripper_mask{_MASK_KEY_SUFFIX[robot]}"
 
 
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-RESET = "\033[0m"
 INDENT = "  "
 
 
@@ -689,20 +680,6 @@ def build_episode_metadata(
         flags,
         log_lines,
     )
-
-
-def decode_camera_frames(steps, camera_key: str) -> np.ndarray:
-    """Decode all frames for one camera. Returns uint8 (N, H, W, 3).
-
-    Handles both JPEG-encoded (dtype=string) and already-decoded (dtype=uint8) tensors.
-    """
-    frames = []
-    for step in steps:
-        img = step["observation"][camera_key]
-        if img.dtype == tf.string:
-            img = tf.io.decode_jpeg(img)
-        frames.append(img.numpy())
-    return np.stack(frames)
 
 
 _BG_COLOR = np.array([0, 255, 0], dtype=np.uint8)  # background mask
