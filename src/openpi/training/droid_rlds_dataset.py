@@ -309,9 +309,14 @@ class DroidRldsDataset:
                 raise ValueError(f"Unsupported action_space: {action_space}")
 
             actions = tf.concat((action_prefix, traj["action_dict"]["gripper_position"]), axis=-1)
-            # NOTE: Michael - Exterior camera view pre-selected once per episode during preprocessing
-            # (one of exterior_image_1_left / exterior_image_2_left, chosen randomly).
-            exterior_img = traj["observation"]["exterior_image_left"]
+            # Sample one exterior view per episode from the exterior keys the schema exposes.
+            obs_in = traj["observation"]
+            exterior_keys = [k for k in ("exterior_image_1_left", "exterior_image_2_left") if k in obs_in]
+            if not exterior_keys and "exterior_image_left" in obs_in:
+                exterior_keys = ["exterior_image_left"]
+            if not exterior_keys:
+                raise ValueError(f"No exterior image key in observation; found {sorted(obs_in)}")
+            exterior_img = tf.random.shuffle([obs_in[k] for k in exterior_keys])[0]
             wrist_img = traj["observation"]["wrist_image_left"]
             # Randomly sample one of the three language instructions
             instruction = tf.random.shuffle(

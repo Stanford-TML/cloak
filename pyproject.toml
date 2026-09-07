@@ -45,8 +45,8 @@ dev = [
     "ruff>=0.8.6",
     "matplotlib>=3.10.0",
 ]
-# Robot-side deploy client (scripts/deploy_policy.py + vendored droid/ env).
-# Runs on the robot workstation via `uv run --group client python scripts/deploy_policy.py`.
+# Robot-side deploy client (deployment/deploy_policy.py + the vendored robot env in deployment/).
+# Runs on the robot workstation via `uv run --group client python deployment/deploy_policy.py`.
 # NOTE: pyzed (ZED SDK), the Sharpa hand SDK (vendored under SharpaWaveSDK_4.3.4/,
 # added to sys.path at runtime), and the Franka control API are hardware/driver
 # packages installed on the robot workstation — intentionally NOT listed here.
@@ -66,6 +66,14 @@ train = [
     "etils>=1.14.0",
     "psutil>=7.0.0",
     "dlimp",  # DROID RLDS helpers; git source below.
+]
+# DROID data preprocessing (scripts/preprocess_metadata.py + preprocess_data.py).
+# TF/TFDS/mujoco/opencv are already in the base install; this adds the mask-render
+# video writer and the HuggingFace CLI for fetching the raw metadata files.
+# Run via `uv run --group preprocess python scripts/preprocess_data.py ...`.
+preprocess = [
+    "mediapy",
+    "huggingface-hub>=0.24",
 ]
 
 [tool.uv]

@@ -10,6 +10,8 @@ import websockets.asyncio.server as _server
 import websockets.frames
 
 from openpi.policies import sharpa_ik_transform
+from openpi.policies import umi_ik_transform
+from openpi.policies import yam_ik_transform
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +71,11 @@ class WebsocketPolicyServer:
                     # seeds from the agreed reset pose, not the previous
                     # episode's final qpos (which can land in a different
                     # null-space branch and produce a different opening arc).
+                    # Reset whichever embodiment's IK singleton is live (each is a
+                    # no-op if its singleton was never built this process).
                     sharpa_ik_transform.reset_ik_singleton()
+                    umi_ik_transform.reset_ik_singleton()
+                    yam_ik_transform.reset_ik_singleton()
                     logger.info("episode_done: reset IK warm-starts.")
                     await websocket.send(packer.pack({"_control_ack": "episode_done"}))
                     continue

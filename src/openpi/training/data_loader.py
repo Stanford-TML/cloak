@@ -116,7 +116,7 @@ def transform_iterable_dataset(
         if data_config.norm_stats is None:
             raise ValueError(
                 "Normalization stats not found. "
-                "Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`."
+                "Make sure to run `preprocessing/compute_norm_stats.py --config-name=<your-config>`."
             )
         norm_stats = data_config.norm_stats
 
@@ -205,7 +205,13 @@ def create_rlds_data_loader(
         skip_batches: Number of batches to skip at the start of the pipeline (for resume).
     """
     dataset = create_rlds_dataset(
-        data_config, action_horizon, batch_size, shuffle=shuffle, seed=seed, skip_batches=skip_batches
+        data_config,
+        action_horizon,
+        batch_size,
+        shuffle=shuffle,
+        seed=seed,
+        skip_batches=skip_batches,
+        shuffle_buffer_size=data_config.shuffle_buffer_size,
     )
     dataset = transform_iterable_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats, is_batched=True)
 

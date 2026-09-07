@@ -7,17 +7,20 @@ set -euo pipefail
 # Off-screen MuJoCo rendering for the gripper-mask transforms.
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 
-# Robots (CONFIG):
-#   robotiq gripper — pi05_full_droid_finetune_{v0,v3}
-#   sharpa hand     — pi05_full_droid_finetune_{v0,v3}_sharpa_ik
-CONFIG=pi05_full_droid_finetune_v3_sharpa_ik
-CHECKPOINT_DIR=/home/michael/src/hand_openpi/checkpoints/pi05_full_droid_finetune_v3-2/
+# One deployment config (the full-cloak v3-1 checkpoint) serves every robot; the
+# robot is chosen with EMBODIMENT: robotiq | sharpa | umi | yam. use_mask renders
+# that robot's wrist mask and use_ik retargets the action chunk to it (no-op for
+# robotiq). EMBODIMENT must match the client (deploy_policy.sh).
+CONFIG=pi05_full_droid_finetune_v3-1_ik
+EMBODIMENT=yam
+CHECKPOINT_DIR=/path/to/checkpoints/pi05_full_droid_finetune_v3-1/exp/100000/
 
-if [[ "${CONFIG}" == *sharpa* ]]; then
+# Sharpa can optionally lock the hand and solve only the arm (see serve_policy.py).
+if [[ "${EMBODIMENT}" == "sharpa" ]]; then
     FIXED_HAND_FLAG="--fixed_hand_sharpa_ik"
 else
     FIXED_HAND_FLAG=""
 fi
 
 POLICY_ARGS=(policy:checkpoint --policy.config="${CONFIG}" --policy.dir="${CHECKPOINT_DIR}")
-uv run scripts/serve_policy.py ${FIXED_HAND_FLAG} "${POLICY_ARGS[@]}"
+uv run deployment/serve_policy.py --embodiment "${EMBODIMENT}" ${FIXED_HAND_FLAG} "${POLICY_ARGS[@]}"

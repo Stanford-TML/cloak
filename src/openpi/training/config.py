@@ -100,6 +100,10 @@ class DataConfig:
     # datasets lacking these features still load). Set by RLDSDroidDataConfig
     # when mask_augmentation_type == "embodiment".
     load_embodiment_masks: bool = False
+    # Frame-level shuffle-buffer size for the RLDS loader. The first batch isn't
+    # emitted until this many frames are buffered, so debug/smoke-test configs set
+    # it small (e.g. 10_000) for a fast first batch. Ignored when shuffle is off.
+    shuffle_buffer_size: int = 250_000
 
 
 class GroupFactory(Protocol):
@@ -209,6 +213,10 @@ class RLDSDroidDataConfig(DataConfigFactory):
     # "embodiment" = embodiment-style mask augmentation (v3.2).
     mask_augmentation_type: Literal["blob", "embodiment"] = "blob"
 
+    # Frame-level shuffle-buffer size (see DataConfig.shuffle_buffer_size). Small
+    # values give a fast first batch for debug/smoke tests.
+    shuffle_buffer_size: int = 250_000
+
     # Filtering options. Can pass a path to a dictionary that maps episodes to timestep ranges
     # to tuples denoting ranges of time steps to keep (start, end). Episodes are uniquely identified with
     # f"{recording_folderpath}--{file_path}", both of which are present in the RLDS episode metadata.
@@ -307,6 +315,7 @@ class RLDSDroidDataConfig(DataConfigFactory):
             datasets=datasets,
             split=self.split,
             load_embodiment_masks=self.mask_augmentation and self.mask_augmentation_type == "embodiment",
+            shuffle_buffer_size=self.shuffle_buffer_size,
         )
 
 
@@ -319,15 +328,17 @@ class InferenceOptions:
     no effect at training time.
     """
 
-    # If true, the wrist-image mask is rendered from the Sharpa hand model.
-    # Otherwise the Robotiq gripper renderer is used.
-    use_sharpa_mask: bool = False
-    # If true, splice SharpaToRobotiqRewrite into the input chain (before
-    # DroidInputs) and SharpaIKTransform into the output chain (after
-    # DroidOutputs/AbsoluteActions) so the served action chunk is converted
-    # from (T, 8) DROID gripper actions to (T, 29) Franka+Sharpa qpos via
-    # Robotiq FK + Sharpa mink IK.
-    apply_sharpa_ik: bool = False
+    # If true, render + inject the deploy embodiment's wrist end-effector mask at
+    # inference. Only meaningful for a checkpoint trained with patch masking
+    # (v3-1). The embodiment (robotiq/sharpa/umi/yam) is chosen at serve time via
+    # serve_policy.py's --embodiment, not here — so this flag is embodiment-generic.
+    use_mask: bool = False
+    # If true, splice the embodiment's <Emb>ToRobotiqRewrite into the input chain
+    # (before DroidInputs) and its <Emb>IKTransform into the output chain (after
+    # DroidOutputs/AbsoluteActions), retargeting the (T, 8) Robotiq action chunk to
+    # the deploy robot via Robotiq FK + mink IK. No-op for embodiment=robotiq
+    # (native — no retargeting).
+    use_ik: bool = False
 
     # Inference-only safety-margin dilation applied to the rendered wrist-image
     # mask before it reaches the model. The mask combine itself stays
@@ -388,7 +399,8 @@ class TrainConfig:
 
     # How often (in steps) to log training metrics.
     log_interval: int = 100
-    # How often (in steps) to save checkpoints.
+    # How often (in steps) to save checkpoints. <= 0 disables checkpoint saving
+    # entirely (including the final step) — used by the debug smoke test.
     save_interval: int = 1000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = 5000
@@ -473,17 +485,24 @@ _PI05_FULL_DROID_FINETUNE_V0 = TrainConfig(
 )
 
 
-_PI05_FULL_DROID_FINETUNE_V3 = dataclasses.replace(
+# v3-1: the full cloak method — majority patch masking PLUS training-time blob
+# mask augmentation. Augmentation is train-only and hard-blocked at serve time
+# (see serve_policy.py), so every v3-1 checkpoint is trained-with-aug and
+# served-without. norm_stats match v0 (augmentation only alters the wrist mask
+# image, never state/actions).
+_PI05_FULL_DROID_FINETUNE_V3_1 = dataclasses.replace(
     _PI05_FULL_DROID_FINETUNE_V0,
-    name="pi05_full_droid_finetune_v3",
+    name="pi05_full_droid_finetune_v3-1",
     model=dataclasses.replace(_PI05_FULL_DROID_FINETUNE_V0.model, patch_masking_strategy="majority"),
     data=dataclasses.replace(
         _PI05_FULL_DROID_FINETUNE_V0.data,
         assets=AssetsConfig(
-            assets_dir="assets/norm_stats/pi05_full_droid_finetune_v3",
+            assets_dir="assets/norm_stats/pi05_full_droid_finetune_v3-1",
             asset_id="droid",
         ),
         use_qpos=True,
+        mask_augmentation=True,
+        mask_augmentation_type="blob",
     ),
 )
 
@@ -505,7 +524,13 @@ _PI05_FULL_DROID_FINETUNE_V0_DEBUG = dataclasses.replace(
         action_dim=32,
         action_horizon=16,
     ),
-    data=dataclasses.replace(_PI05_FULL_DROID_FINETUNE_V0.data, use_droid_100=True),
+    # Full preprocessed droid/1.0.1; filter_dict_path=None keeps all frames (no
+    # gs:// fetch); small shuffle buffer for a fast first batch.
+    data=dataclasses.replace(
+        _PI05_FULL_DROID_FINETUNE_V0.data,
+        datasets=(droid_rlds_dataset.RLDSDataset(name="droid", version="1.0.1", weight=1.0, filter_dict_path=None),),
+        shuffle_buffer_size=10_000,
+    ),
     weight_loader=weight_loaders.NoOpWeightLoader(),
     num_train_steps=100,
     log_interval=10,
@@ -515,54 +540,41 @@ _PI05_FULL_DROID_FINETUNE_V0_DEBUG = dataclasses.replace(
 )
 
 
-_PI05_FULL_DROID_FINETUNE_V3_DEBUG = dataclasses.replace(
+# Masking-only (no mask_augmentation): the debug configs run on the small,
+# *vanilla* droid_100 dataset, which has no precomputed gripper-mask streams.
+# patch_masking_strategy gracefully no-ops when the mask is absent (DroidInputs
+# only wires pixel_mask when present), but MaskAugmentation hard-requires the
+# mask stream — so it's left off here. The full v3-1 (with blob augmentation)
+# trains on the mask-preprocessed DROID dataset.
+_PI05_FULL_DROID_FINETUNE_V3_1_DEBUG = dataclasses.replace(
     _PI05_FULL_DROID_FINETUNE_V0_DEBUG,
-    name="pi05_full_droid_finetune_v3_debug",
+    name="pi05_full_droid_finetune_v3-1_debug",
     model=dataclasses.replace(_PI05_FULL_DROID_FINETUNE_V0_DEBUG.model, patch_masking_strategy="majority"),
     data=dataclasses.replace(
         _PI05_FULL_DROID_FINETUNE_V0_DEBUG.data,
-        assets=AssetsConfig(assets_dir="assets/norm_stats/pi05_full_droid_finetune_v3", asset_id="droid"),
+        assets=AssetsConfig(assets_dir="assets/norm_stats/pi05_full_droid_finetune_v3-1", asset_id="droid"),
     ),
 )
 
 
 """
-Sharpa Configs
+Deployment (cross-embodiment) config
 """
 
-# v0 served to a Sharpa hand client. Same checkpoint + norm stats as v0; only
-# the inference chain differs: Sharpa->Robotiq FK input rewrite + (T, 8) Robotiq
-# -> (T, 29) Franka+Sharpa output IK. No wrist mask — v0 has no
-# patch_masking_strategy (baseline pi0.5, trained on raw RGB), so use_sharpa_mask
-# is set False explicitly to make the absence of masking unambiguous. Mirrors
-# pi05_full_droid_finetune_v3_sharpa_ik on the v0 checkpoint (v0 has the same
-# use_qpos=True proprio shape as v3).
-_PI05_FULL_DROID_FINETUNE_V0_SHARPA_IK = dataclasses.replace(
-    _PI05_FULL_DROID_FINETUNE_V0,
-    name="pi05_full_droid_finetune_v0_sharpa_ik",
+# The v3-1 (full-cloak) checkpoint served to a cross-embodiment client. One
+# config serves every robot: the embodiment (robotiq/sharpa/umi/yam) is chosen at
+# serve time via serve_policy.py's --embodiment. use_mask renders that robot's
+# wrist end-effector mask; use_ik FK-rewrites the incoming proprio into the
+# Robotiq-equivalent state the policy was trained on and IK-retargets the (T, 8)
+# Robotiq action chunk to the robot (no-op retargeting for native robotiq). Same
+# checkpoint + norm stats as v3-1 — only the inference chain differs.
+_PI05_FULL_DROID_FINETUNE_V3_1_IK = dataclasses.replace(
+    _PI05_FULL_DROID_FINETUNE_V3_1,
+    name="pi05_full_droid_finetune_v3-1_ik",
     inference=dataclasses.replace(
-        _PI05_FULL_DROID_FINETUNE_V0.inference,
-        use_sharpa_mask=False,
-        apply_sharpa_ik=True,
-    ),
-)
-
-
-# v3 served to a Sharpa hand client. Same checkpoint + norm stats as v3; only
-# the inference chain differs: render the Sharpa hand mask on the wrist patch,
-# FK-rewrite the incoming (Sharpa arm + hand) state into the Robotiq-equivalent
-# arm + scalar gripper the v3 policy was trained on, and IK-translate the
-# (T, 8) Robotiq action chunk into (T, 29) Franka+Sharpa qpos. Mirrors
-# pi05_full_droid_finetune_v1_sharpa_ik on the v3 checkpoint. The
-# joint_position / gripper_position rewrite is what makes the Sharpa pose
-# in-distribution for the Robotiq-trained model.
-_PI05_FULL_DROID_FINETUNE_V3_SHARPA_IK = dataclasses.replace(
-    _PI05_FULL_DROID_FINETUNE_V3,
-    name="pi05_full_droid_finetune_v3_sharpa_ik",
-    inference=dataclasses.replace(
-        _PI05_FULL_DROID_FINETUNE_V3.inference,
-        use_sharpa_mask=True,
-        apply_sharpa_ik=True,
+        _PI05_FULL_DROID_FINETUNE_V3_1.inference,
+        use_mask=True,
+        use_ik=True,
     ),
 )
 
@@ -571,13 +583,12 @@ _PI05_FULL_DROID_FINETUNE_V3_SHARPA_IK = dataclasses.replace(
 _CONFIGS = [
     # DROID pi0.5 fine-tuning bases.
     _PI05_FULL_DROID_FINETUNE_V0,
-    _PI05_FULL_DROID_FINETUNE_V3,
+    _PI05_FULL_DROID_FINETUNE_V3_1,
     # Debug (tiny model, droid_100) — training smoke test.
     _PI05_FULL_DROID_FINETUNE_V0_DEBUG,
-    _PI05_FULL_DROID_FINETUNE_V3_DEBUG,
-    # Sharpa serving configs.
-    _PI05_FULL_DROID_FINETUNE_V0_SHARPA_IK,
-    _PI05_FULL_DROID_FINETUNE_V3_SHARPA_IK,
+    _PI05_FULL_DROID_FINETUNE_V3_1_DEBUG,
+    # Cross-embodiment deployment config (robot chosen at serve time via --embodiment).
+    _PI05_FULL_DROID_FINETUNE_V3_1_IK,
 ]
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
     raise ValueError("Config names must be unique.")
