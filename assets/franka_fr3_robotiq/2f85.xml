@@ -1,7 +1,9 @@
 
 
 <mujoco model="robotiq_2f85">
-    <body name="base_mount" pos="0 0 0.107" euler="0 0 1.5708" childclass="2f85" gravcomp="1">
+    <!-- Coupling AGC-CPL-062-002 (13.9 mm, mesh centred on the body origin): its 3 mm recess seats over the
+         flange boss at 0.107, so 10.9 mm protrudes and the gripper base sits 0.111 + 0.0038 from link7. -->
+    <body name="base_mount" pos="0 0 0.111" euler="0 0 1.5708" childclass="2f85" gravcomp="1">
         <geom class="2f85_visual" mesh="base_mount" material="black"/>
         <geom class="2f85_collision" mesh="base_mount"/>
         <body name="2f85_base" pos="0 0 0.0038" quat="1 0 0 -1" gravcomp="1">

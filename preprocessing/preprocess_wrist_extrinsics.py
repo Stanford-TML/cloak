@@ -22,6 +22,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from typing import Literal
 
 os.environ.setdefault("MUJOCO_GL", "egl")
 
@@ -54,10 +55,30 @@ NM_INIT_R_STEP = 0.0087  # ~0.5 deg initial simplex spread (rotation)
 EXTRINSICS_OUTLIER_PERCENTILE = 99.0
 
 
+@dataclasses.dataclass(frozen=True)
+class CalibOptions:
+    cue: Literal["intersection", "intensity", "std"] = "intersection"
+    """Target-mask cue: low intensity, low temporal std, or their intersection."""
+    keep_frac: float = BIN_KEEP_FRAC
+    """Fraction of ROI pixels kept by each cue's percentile threshold."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Target:
+    """A pseudo-GT silhouette plus the robot state to render its match from."""
+    mask: np.ndarray
+    joint_position: np.ndarray
+    gripper_position: float
+    step: int
+
+
+def _gripper_positions(steps) -> np.ndarray:
+    return np.array([s["observation"]["gripper_position"].numpy().item() for s in steps])
+
+
 def _select_kept_gray(steps, frames):
     """Grayscale (K, H, W) of the gripper-open frames, or None if too few."""
-    grip = np.array([s["observation"]["gripper_position"].numpy().item() for s in steps])
-    keep = grip <= OPEN_TOL
+    keep = _gripper_positions(steps) <= OPEN_TOL
     if int(keep.sum()) < MIN_KEEP_FRAMES:
         return None
     return np.stack([cv2.cvtColor(f, cv2.COLOR_RGB2GRAY) for f in frames[keep]]).astype(np.float32)
@@ -70,19 +91,24 @@ def _gripper_roi(H: int, W: int) -> np.ndarray:
     return roi
 
 
-def _threshold_mask(score: np.ndarray, roi: np.ndarray) -> np.ndarray:
-    """Keep the bottom `BIN_KEEP_FRAC` of `score` inside `roi`."""
-    thr = float(np.percentile(score[roi], BIN_KEEP_FRAC * 100))
+def _threshold_mask(score: np.ndarray, roi: np.ndarray, keep_frac: float) -> np.ndarray:
+    """Keep the bottom `keep_frac` of `score` inside `roi`."""
+    thr = float(np.percentile(score[roi], keep_frac * 100))
     return (score < thr) & roi
 
 
-def _build_target_mask(steps, frames):
-    """Gripper target mask: low-intensity AND low temporal-std, in the gripper ROI."""
+def build_target_mask(steps, frames, opts: CalibOptions = CalibOptions()):
+    """Gripper target mask from the gripper-open frames, in the gripper ROI. None if too few frames."""
     gray = _select_kept_gray(steps, frames)
     if gray is None:
         return None
-    intensity = _threshold_mask(np.median(gray, axis=0), _gripper_roi(*gray.shape[1:]))
-    std = _threshold_mask(gray.std(axis=0), _gripper_roi(*gray.shape[1:]))
+    roi = _gripper_roi(*gray.shape[1:])
+    if opts.cue == "intensity":
+        return _threshold_mask(np.median(gray, axis=0), roi, opts.keep_frac)
+    if opts.cue == "std":
+        return _threshold_mask(gray.std(axis=0), roi, opts.keep_frac)
+    intensity = _threshold_mask(np.median(gray, axis=0), roi, opts.keep_frac)
+    std = _threshold_mask(gray.std(axis=0), roi, opts.keep_frac)
     return intensity & std
 
 
@@ -97,20 +123,35 @@ def _pose_distance(pose: np.ndarray, ref: np.ndarray):
     return float(np.linalg.norm(pose[:3] - ref[:3])), float(R.magnitude())
 
 
-def optimize_episode(steps, frames, fy: float, sim: Sim):
-    """Return (cam_to_gripper, iou_init, iou_opt). Raises RuntimeError if unoptimizable."""
-    target = _build_target_mask(steps, frames)
-    if target is None:
-        raise RuntimeError("no gripper-open frames for target mask")
-    grip = np.array([s["observation"]["gripper_position"].numpy().item() for s in steps])
-    open_idx = int(np.argmax(grip <= OPEN_TOL))
-    qpos = steps[open_idx]["observation"]["joint_position"].numpy()
-    T_ee = sim.set_pose(qpos, float(grip[open_idx]))
+def first_open_step(steps) -> int:
+    return int(np.argmax(_gripper_positions(steps) <= OPEN_TOL))
+
+
+def build_target(steps, frames, opts: CalibOptions = CalibOptions()) -> Target | None:
+    """Open-frame target mask with the robot state of the first gripper-open step."""
+    mask = build_target_mask(steps, frames, opts)
+    if mask is None:
+        return None
+    t = first_open_step(steps)
+    return Target(mask, steps[t]["observation"]["joint_position"].numpy(),
+                  steps[t]["observation"]["gripper_position"].numpy().item(), t)
+
+
+def render_target_pose(target: Target, params: np.ndarray, fy: float, sim: Sim) -> np.ndarray:
+    T_ee = sim.set_pose(target.joint_position, target.gripper_position)
+    return sim.render_gripper_mask(T_ee @ sim.t_c2g_from_6vec(params), fy)
+
+
+def optimize_pose(target: Target, fy: float, sim: Sim, init: np.ndarray):
+    """Nelder-Mead the 6-DOF cam_to_gripper from `init` to maximize IoU with `target`.
+
+    Returns (cam_to_gripper, iou_init, iou_opt, n_iter).
+    """
 
     def loss(params):
-        return 1.0 - _iou(sim.render_gripper_mask(T_ee @ sim.t_c2g_from_6vec(params), fy), target)
+        return 1.0 - _iou(render_target_pose(target, params, fy, sim), target.mask)
 
-    init = DEFAULT_CAM_TO_GRIPPER.astype(np.float64).copy()
+    init = np.asarray(init, dtype=np.float64)
     init_step = np.array([NM_INIT_T_STEP] * 3 + [NM_INIT_R_STEP] * 3)
     init_simplex = np.vstack([init] + [init + init_step * e for e in np.eye(6)])
     iou_init = 1.0 - loss(init)
@@ -119,7 +160,16 @@ def optimize_episode(steps, frames, fy: float, sim: Sim):
         options={"initial_simplex": init_simplex, "maxiter": NM_MAXITER,
                  "xatol": 1e-4, "fatol": 1e-4, "adaptive": True, "disp": False},
     )
-    return np.asarray(result.x, dtype=np.float64), float(iou_init), float(1.0 - result.fun)
+    return np.asarray(result.x, dtype=np.float64), float(iou_init), float(1.0 - result.fun), int(result.nit)
+
+
+def optimize_episode(steps, frames, fy: float, sim: Sim, opts: CalibOptions = CalibOptions()):
+    """Return (cam_to_gripper, iou_init, iou_opt). Raises RuntimeError if unoptimizable."""
+    target = build_target(steps, frames, opts)
+    if target is None:
+        raise RuntimeError("no gripper-open frames for target mask")
+    pose, iou_init, iou_opt, _ = optimize_pose(target, fy, sim, DEFAULT_CAM_TO_GRIPPER)
+    return pose, iou_init, iou_opt
 
 
 def filter_outliers(entries: dict, percentile: float = EXTRINSICS_OUTLIER_PERCENTILE) -> dict:
@@ -151,6 +201,7 @@ class Args:
     output: Path = Path("droid_wrist_extrinsics.json")
     limit: int | None = None
     """Cap the number of episodes (for testing)."""
+    opts: CalibOptions = dataclasses.field(default_factory=CalibOptions)
 
 
 def main(args: Args) -> None:
@@ -176,7 +227,7 @@ def main(args: Args) -> None:
             steps = list(ep["steps"])
             frames = decode_camera_frames(steps, WRIST_CAM_KEY)
             try:
-                pose, iou_init, iou_opt = optimize_episode(steps, frames, fy, sim)
+                pose, iou_init, iou_opt = optimize_episode(steps, frames, fy, sim, args.opts)
             except RuntimeError:
                 n_fail += 1
                 continue

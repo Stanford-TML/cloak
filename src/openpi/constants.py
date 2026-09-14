@@ -38,13 +38,13 @@ def lerp_gripper_qpos(gripper_position: float) -> np.ndarray:
 RLDS_H, RLDS_W = 180, 320
 WRIST_CAM_KEY = "wrist_image_left"
 
-# Mean wrist-camera parameters across DROID (fallback + per-episode optimization
-# seed): cam_to_gripper [tx,ty,tz,rx,ry,rz] (m + XYZ euler rad) in the EE frame,
-# and [fx,fy,cx,cy] intrinsics at RLDS 320x180.
+# Wrist-camera defaults (fallback + per-episode optimization seed): cam_to_gripper
+# [tx,ty,tz,rx,ry,rz] (m + XYZ euler rad) in the EE frame is the per-axis median of DROID's
+# own hand-eye calibrations over a 199-episode sample; [fx,fy,cx,cy] intrinsics at RLDS 320x180.
 # fmt: off
 DEFAULT_CAM_TO_GRIPPER = np.array([
-    -0.07603768464487827, 0.030755540645682176, -0.005156207813252746,
-    -0.33089674351839693, 0.0052405001986228815, -1.5305427085990393,
+    -0.07681219651266653, 0.032719546576154224, 0.018184317001536304,
+    -0.34124002343257753, 0.009745173060778045, -1.5734142897273566,
 ])
 DEFAULT_WRIST_INTRINSICS = np.array([
     182.7151540905966, 182.7151540905966, 160.14853881286072, 89.9061105794428,
