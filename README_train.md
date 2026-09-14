@@ -15,7 +15,9 @@ gsutil -m cp -r gs://gresearch/robotics/droid/1.0.1 /path/to/DROID
 
 This step computes metadata needed for later steps: language annotations, camera intrinsics, and zed serial numbers.
 It processes them into a simpler key format used by our repo. This step is optional; we provide pre-computed metadata
-in `assets/`.
+in `assets/`. Passing `--rlds-data-dir` additionally writes `assets/droid_shard_index.json`, mapping each episode key
+to `[shard_number, index_in_shard]` in the DROID 1.0.1 RLDS TFRecords, so a single episode can be loaded by key without
+scanning the dataset.
 
 ```bash
 # First download assets from HuggingFace.

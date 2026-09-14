@@ -2,10 +2,13 @@
 """Reduce DROID metadata files from KarlP/droid into (LAB, timestamp)-keyed lookups,
 and classify the per-episode wrist serial from per-serial focal length.
 
-Three outputs:
+Four outputs:
   - assets/droid_lang_annotations_processed.json — language annotation triples
   - assets/droid_intrinsics_processed.json       — wrist+exterior camera intrinsics
   - assets/droid_zed_serials.json                — per-episode {"wrist": <serial>}
+  - assets/droid_shard_index.json                — per-episode [shard_number, index_in_shard]
+                                                   into the DROID 1.0.1 RLDS TFRecords (optional,
+                                                   needs --rlds-data-dir; see `build_shard_index`)
 
 The raw annotations file is keyed by composite episode_id `<LAB>+<hash>+<timestamp>`.
 The 8-char hash is opaque upstream state and exists in only two places: the
@@ -48,9 +51,12 @@ Usage:
 """
 
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 import dataclasses
 import json
+import multiprocessing
 from pathlib import Path
+import re
 import statistics
 import sys
 
@@ -58,12 +64,13 @@ import tyro
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from utils import make_lang_annotation_key, parse_annotation_episode_id  # noqa: E402
+from utils import file_path_to_lang_key, find_dataset_dir, make_lang_annotation_key, parse_annotation_episode_id  # noqa: E402
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 DEFAULT_ANN_OUTPUT = ASSETS_DIR / "droid_lang_annotations_processed.json"
 DEFAULT_INTRINSICS_OUTPUT = ASSETS_DIR / "droid_intrinsics_processed.json"
 DEFAULT_ZED_SERIALS_OUTPUT = ASSETS_DIR / "droid_zed_serials.json"
+DEFAULT_SHARD_INDEX_OUTPUT = ASSETS_DIR / "droid_shard_index.json"
 
 
 @dataclasses.dataclass
@@ -78,6 +85,12 @@ class Args:
     """Output JSON path for processed camera intrinsics."""
     zed_serials_output_path: Path = DEFAULT_ZED_SERIALS_OUTPUT
     """Output JSON path for per-episode ZED serials."""
+    rlds_data_dir: Path | None = None
+    """DROID RLDS dataset dir; if given, also build the episode -> shard index."""
+    shard_index_output_path: Path = DEFAULT_SHARD_INDEX_OUTPUT
+    """Output JSON path for the episode -> shard index."""
+    n_workers: int = 8
+    """Processes used to crawl the RLDS shards."""
 
 
 def _build_annotations(raw: dict) -> dict[str, list[str]]:
@@ -356,6 +369,54 @@ def _build_zed_serials(intrinsics_lookup: dict[str, dict[str, list[float]]]) -> 
     return out
 
 
+_SHARD_NUMBER_RE = re.compile(r"\.tfrecord-(\d+)-of-\d+$")
+
+
+def _index_shard(shard_path: Path) -> list[tuple[str, int, int]]:
+    """Worker: (key, shard_number, index) for every episode in one shard, parsing only the file_path."""
+    import tensorflow as tf  # imported here so the parent never loads TF
+
+    shard_number = int(_SHARD_NUMBER_RE.search(shard_path.name).group(1))
+    spec = {"episode_metadata/file_path": tf.io.FixedLenFeature([], tf.string)}
+    out = []
+    for i, raw in enumerate(tf.data.TFRecordDataset([str(shard_path)])):
+        file_path = tf.io.parse_single_example(raw, spec)["episode_metadata/file_path"].numpy().decode()
+        key = file_path_to_lang_key(file_path)
+        if key is not None:
+            out.append((key, shard_number, i))
+    return out
+
+
+def build_shard_index(data_dir: Path, n_workers: int) -> dict[str, list[int]]:
+    """(LAB|TS) -> [shard_number, index_in_shard] for the RLDS TFRecords under `data_dir`.
+
+    Shard numbers refer to the sorted `*.tfrecord-NNNNN-of-MMMMM` files; the index is the
+    episode's position within that shard. Success and failure episodes are both indexed.
+    Duplicate keys (the TRI double-upload case) keep the first occurrence.
+    """
+    dataset_dir = find_dataset_dir(data_dir)
+    shards = sorted(p for p in dataset_dir.glob("*.tfrecord*") if not p.name.endswith(".tmp"))
+    print(f"Indexing {len(shards)} shards under {dataset_dir} with {n_workers} workers")
+    out: dict[str, list[int]] = {}
+    n_total = n_dup = 0
+    with ProcessPoolExecutor(max_workers=n_workers, mp_context=multiprocessing.get_context("spawn")) as ex:
+        for done, entries in enumerate(ex.map(_index_shard, shards), start=1):
+            for key, shard_number, i in entries:
+                n_total += 1
+                if key in out:
+                    n_dup += 1
+                    continue
+                out[key] = [shard_number, i]
+            if done % 100 == 0 or done == len(shards):
+                print(f"  {done}/{len(shards)} shards, {n_total:,} episodes", flush=True)
+    print()
+    print("===== Shard-index build summary =====")
+    print(f"Episodes seen                   : {n_total:,}")
+    print(f"Duplicate keys skipped          : {n_dup:,}")
+    print(f"Final lookup entries            : {len(out):,}")
+    return out
+
+
 def _write(out_path: Path, data: dict, label: str) -> None:
     out_path = out_path.expanduser()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -397,6 +458,9 @@ def main(args: Args) -> None:
 
     serials_lookup = _build_zed_serials(intr_lookup)
     _write(args.zed_serials_output_path, serials_lookup, "ZED-serial")
+
+    if args.rlds_data_dir is not None:
+        _write(args.shard_index_output_path, build_shard_index(args.rlds_data_dir, args.n_workers), "shard-index")
 
 
 if __name__ == "__main__":
