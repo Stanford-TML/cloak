@@ -32,6 +32,10 @@ The robot client requires the deployment hardware:
 - **Franka arm + ZED camera** — the standard DROID robot platform. See the [DROID setup docs](https://droid-dataset.github.io/droid).
 - **Sharpa hand** (for Sharpa configs) — obtain the `SharpaWaveSDK_4.3.4/` SDK and place it at the repo root; it is loaded at runtime. Requires Python 3.10–3.12.
 
+Before running, upload the end-effector config for your gripper to Franka Desk (Settings → End-Effector) so the
+controller uses the correct mass and inertia. Configs live in `deployment/endeffector_configs/` (`robotiq_2f85.json`,
+`sharpa_angled.json`, `umi_roll135.json`).
+
 Serve the policy:
 
 ```bash
