@@ -17,8 +17,10 @@ results are written as { "<LAB>|<timestamp>": [tx,ty,tz, rx,ry,rz] }.
     python preprocessing/preprocess_wrist_extrinsics.py --data-dir /path/to/DROID --output out.json
 """
 
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import dataclasses
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import sys
@@ -200,49 +202,69 @@ class Args:
     """Path to the DROID RLDS dataset."""
     output: Path = Path("droid_wrist_extrinsics.json")
     limit: int | None = None
-    """Cap the number of episodes (for testing)."""
+    """Cap the number of episodes per shard (for testing)."""
+    n_workers: int = 24
+    """Parallel worker processes, one shard at a time each (each holds its own Sim)."""
     opts: CalibOptions = dataclasses.field(default_factory=CalibOptions)
+
+
+_WORKER: dict = {}
+
+
+def process_shard(shard: Path, dataset_dir: Path, opts: CalibOptions, limit: int | None):
+    """Calibrate every episode in one shard. Returns (entries, n_fail, log lines)."""
+    if not _WORKER:
+        _WORKER["sim"] = Sim()
+        _WORKER["builder"] = tfds.builder_from_directory(str(dataset_dir))
+    sim, builder = _WORKER["sim"], _WORKER["builder"]
+    # One representative wrist focal length; per-episode intrinsics would tighten accuracy.
+    fy = float(DEFAULT_WRIST_INTRINSICS[1])
+    entries, n_fail, logs = {}, 0, []
+    for raw in tf.data.TFRecordDataset([str(shard)]):
+        ep = builder.info.features.deserialize_example(raw.numpy())
+        nfs = ep["episode_metadata"]["file_path"].numpy().decode()
+        if "/success/" not in nfs:
+            continue
+        key = file_path_to_lang_key(nfs)
+        if key is None:
+            continue
+        steps = list(ep["steps"])
+        frames = decode_camera_frames(steps, WRIST_CAM_KEY)
+        try:
+            pose, iou_init, iou_opt = optimize_episode(steps, frames, fy, sim, opts)
+        except RuntimeError:
+            n_fail += 1
+            continue
+        entries[key] = pose.tolist()
+        logs.append(f"{key}  IoU {iou_init:.2f} -> {iou_opt:.2f}")
+        if limit and len(entries) >= limit:
+            break
+    return entries, n_fail, logs
 
 
 def main(args: Args) -> None:
     dataset_dir = find_dataset_dir(args.data_dir)
     shards = sorted(p for p in dataset_dir.glob("*.tfrecord*") if not p.name.endswith(".tmp"))
-    builder = tfds.builder_from_directory(str(dataset_dir))
-    sim = Sim()
-    # One representative wrist focal length; per-episode intrinsics would tighten accuracy.
-    fy = float(DEFAULT_WRIST_INTRINSICS[1])
     print(f"Found {len(shards)} shards in {dataset_dir}")
 
     entries: dict[str, list] = {}
-    n_ok = n_fail = 0
-    for shard in shards:
-        for raw in tf.data.TFRecordDataset([str(shard)]):
-            ep = builder.info.features.deserialize_example(raw.numpy())
-            nfs = ep["episode_metadata"]["file_path"].numpy().decode()
-            if "/success/" not in nfs:
-                continue
-            key = file_path_to_lang_key(nfs)
-            if key is None:
-                continue
-            steps = list(ep["steps"])
-            frames = decode_camera_frames(steps, WRIST_CAM_KEY)
-            try:
-                pose, iou_init, iou_opt = optimize_episode(steps, frames, fy, sim, args.opts)
-            except RuntimeError:
-                n_fail += 1
-                continue
-            entries[key] = pose.tolist()
-            n_ok += 1
-            print(f"[{n_ok}] {key}  IoU {iou_init:.2f} -> {iou_opt:.2f}")
-            if args.limit and n_ok >= args.limit:
-                break
-        if args.limit and n_ok >= args.limit:
-            break
+    n_fail = 0
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=args.n_workers, mp_context=ctx) as ex:
+        futures = {ex.submit(process_shard, s, dataset_dir, args.opts, args.limit): s for s in shards}
+        for i, fut in enumerate(as_completed(futures), 1):
+            shard_entries, shard_fail, logs = fut.result()
+            entries.update(shard_entries)
+            n_fail += shard_fail
+            print("\n".join(logs))
+            print(f"[{i}/{len(shards)}] {futures[fut].name}  ok={len(entries)} fail={n_fail}", flush=True)
+            # Checkpoint so a crash does not lose finished shards.
+            write_json(entries, args.output)
 
     n_before = len(entries)
     entries = filter_outliers(entries)
     write_json(entries, args.output)
-    print(f"\nOptimized {n_ok} ({n_fail} skipped); dropped {n_before - len(entries)} outliers; "
+    print(f"\nOptimized {n_before} ({n_fail} skipped); dropped {n_before - len(entries)} outliers; "
           f"wrote {len(entries)} -> {args.output}")
 
 
