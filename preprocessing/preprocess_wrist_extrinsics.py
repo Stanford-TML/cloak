@@ -37,6 +37,8 @@ from utils import decode_camera_frames, file_path_to_lang_key, find_dataset_dir 
 # Drop episodes past this percentile of translation/rotation drift from the mean.
 EXTRINSICS_OUTLIER_PERCENTILE = 99.0
 
+SHARD_INDEX_PATH = Path(__file__).resolve().parent.parent / "assets" / "droid_shard_index.json"
+
 
 def optimize_episode(steps, frames, fy: float, sim: Sim, opts: CalibOptions = CalibOptions()):
     """Return (cam_to_gripper, iou_init, iou_opt). Raises RuntimeError if unoptimizable."""
@@ -60,6 +62,13 @@ def filter_outliers(entries: dict, percentile: float = EXTRINSICS_OUTLIER_PERCEN
     return {k: entries[k] for k in keys if dist[k][0] < t_thr and dist[k][1] < r_thr}
 
 
+def shards_for_keys(shards: list[Path], keys: set[str]) -> list[Path]:
+    """The shards holding `keys`, looked up in the shard-index asset."""
+    shard_index = json.loads(SHARD_INDEX_PATH.read_text())
+    wanted = {f"{shard_index[k][0]:05d}" for k in keys}
+    return [s for s in shards if s.name.split(".tfrecord-")[1].split("-of-")[0] in wanted]
+
+
 def write_json(entries: dict, path: Path) -> None:
     """Write { key: [6 floats] } sorted, one human-readable entry per line."""
     items = sorted(entries.items())
@@ -78,6 +87,9 @@ class Args:
     output: Path = Path("droid_wrist_extrinsics.json")
     limit: int | None = None
     """Cap the number of episodes per shard (for testing)."""
+    keys: Path | None = None
+    """Only calibrate the episode keys (LAB|timestamp, one per line) in this file; shards
+    are looked up in assets/droid_shard_index.json."""
     n_workers: int = 24
     """Parallel worker processes, one shard at a time each (each holds its own Sim)."""
     opts: CalibOptions = dataclasses.field(default_factory=CalibOptions)
@@ -86,8 +98,8 @@ class Args:
 _WORKER: dict = {}
 
 
-def process_shard(shard: Path, dataset_dir: Path, opts: CalibOptions, limit: int | None):
-    """Calibrate every episode in one shard. Returns (entries, n_fail, log lines)."""
+def process_shard(shard: Path, dataset_dir: Path, opts: CalibOptions, limit: int | None, keys: set | None = None):
+    """Calibrate every episode in one shard (or only those in `keys`). Returns (entries, n_fail, log lines)."""
     if not _WORKER:
         _WORKER["sim"] = Sim()
         _WORKER["builder"] = tfds.builder_from_directory(str(dataset_dir))
@@ -101,7 +113,7 @@ def process_shard(shard: Path, dataset_dir: Path, opts: CalibOptions, limit: int
         if "/success/" not in nfs:
             continue
         key = file_path_to_lang_key(nfs)
-        if key is None:
+        if key is None or (keys is not None and key not in keys):
             continue
         steps = list(ep["steps"])
         frames = decode_camera_frames(steps, WRIST_CAM_KEY)
@@ -121,12 +133,17 @@ def main(args: Args) -> None:
     dataset_dir = find_dataset_dir(args.data_dir)
     shards = sorted(p for p in dataset_dir.glob("*.tfrecord*") if not p.name.endswith(".tmp"))
     print(f"Found {len(shards)} shards in {dataset_dir}")
+    keys = None
+    if args.keys is not None:
+        keys = set(args.keys.read_text().split())
+        shards = shards_for_keys(shards, keys)
+        print(f"Restricting to {len(keys)} episodes in {len(shards)} shards")
 
     entries: dict[str, list] = {}
     n_fail = 0
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=args.n_workers, mp_context=ctx) as ex:
-        futures = {ex.submit(process_shard, s, dataset_dir, args.opts, args.limit): s for s in shards}
+        futures = {ex.submit(process_shard, s, dataset_dir, args.opts, args.limit, keys): s for s in shards}
         for i, fut in enumerate(as_completed(futures), 1):
             shard_entries, shard_fail, logs = fut.result()
             entries.update(shard_entries)

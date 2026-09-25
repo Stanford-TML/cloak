@@ -108,7 +108,9 @@ def capture(serial: str, embodiment: str) -> dict:
     """
     from deployment.camera_utils.wrappers.multi_camera_wrapper import MultiCameraWrapper
 
-    use_gripper = embodiment == "robotiq"  # the Sharpa hand is driven here, not by the NUC
+    # The NUC only polls/drives the gripper for Robotiq; the Sharpa hand is driven here via
+    # its SDK. The NUC controller config (gripper_kind) stays Robotiq, as in RobotEnv.
+    use_gripper = embodiment == "robotiq"
     if nuc_ip is None:
         from franka.robot import FrankaRobot
 
@@ -116,7 +118,7 @@ def capture(serial: str, embodiment: str) -> dict:
     else:
         from deployment.misc.server_interface import ServerInterface
 
-        robot = ServerInterface(ip_address=nuc_ip, use_gripper=use_gripper, gripper_kind="robotiq_2f")
+        robot = ServerInterface(ip_address=nuc_ip, use_gripper=use_gripper)
     hand = _connect_sharpa_hand() if embodiment == "sharpa" else None
     camera = MultiCameraWrapper().camera_dict[serial]
     home = HOME_QPOS[embodiment]

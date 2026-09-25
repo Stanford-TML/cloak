@@ -72,3 +72,9 @@ accurate alignment to sim than the extrinsics shipped with DROID.
 - `examples/render_extrinsics.py` — Minimal example of using the extrinsics to render the wrist view.
 
 To regenerate them via Silhouette Calibration, see [Data preprocessing](README_train.md) (optional — we ship the precomputed extrinsics).
+
+## Tests
+
+```bash
+uv run --group dev pytest
+```

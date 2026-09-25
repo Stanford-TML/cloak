@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run the unit tests before every local commit. Enable once per clone with:
+#   git config core.hooksPath scripts/githooks
+# Skip for one commit with: git commit --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+export MUJOCO_GL="${MUJOCO_GL:-egl}"
+uv run --group dev pytest -q

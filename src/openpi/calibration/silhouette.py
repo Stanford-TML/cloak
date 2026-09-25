@@ -167,62 +167,6 @@ class Sim:
 
 
 # ---------------------------------------------------------------------------
-# End-effector color
-# ---------------------------------------------------------------------------
-
-_VISIBLE_GROUPS = (0, 1, 2)  # MuJoCo's default-visible geom groups (collision proxies sit in 3)
-_DEFAULT_GEOM_RGBA = np.array([0.5, 0.5, 0.5, 1.0])
-
-
-def _geom_surface_area(model: mujoco.MjModel, g: int) -> float:
-    """Surface area (m^2) of geom `g`; 0 for types we don't weight (planes, hfields, ...)."""
-    t, (s0, s1, s2) = model.geom_type[g], model.geom_size[g]
-    if t == mujoco.mjtGeom.mjGEOM_MESH:
-        m = model.geom_dataid[g]
-        verts = model.mesh_vert[model.mesh_vertadr[m]:model.mesh_vertadr[m] + model.mesh_vertnum[m]]
-        faces = model.mesh_face[model.mesh_faceadr[m]:model.mesh_faceadr[m] + model.mesh_facenum[m]]
-        a, b, c = verts[faces[:, 0]], verts[faces[:, 1]], verts[faces[:, 2]]
-        return float(0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1).sum())
-    if t == mujoco.mjtGeom.mjGEOM_BOX:
-        return 8.0 * (s0 * s1 + s1 * s2 + s0 * s2)
-    if t == mujoco.mjtGeom.mjGEOM_SPHERE:
-        return 4.0 * np.pi * s0**2
-    if t == mujoco.mjtGeom.mjGEOM_CAPSULE:
-        return 4.0 * np.pi * s0 * s1 + 4.0 * np.pi * s0**2
-    if t == mujoco.mjtGeom.mjGEOM_CYLINDER:
-        return 4.0 * np.pi * s0 * s1 + 2.0 * np.pi * s0**2
-    return 0.0
-
-
-def _geom_rgba(model: mujoco.MjModel, g: int) -> np.ndarray:
-    """The color MuJoCo draws geom `g` with: its material's rgba unless the geom sets its own."""
-    rgba = model.geom_rgba[g]
-    if model.geom_matid[g] >= 0 and np.allclose(rgba, _DEFAULT_GEOM_RGBA):
-        return model.mat_rgba[model.geom_matid[g]]
-    return rgba
-
-
-def ee_mean_color(embodiment: str) -> np.ndarray:
-    """Surface-area-weighted mean RGB (0-255) of the embodiment's visible end-effector
-    geoms, from the model's rgba/material colors.
-
-    These are the modeler's display colors, not measured albedo: pixel values in a
-    real image also depend on lighting, exposure and white balance.
-    """
-    emb = EMBODIMENTS[embodiment]
-    model = mujoco.MjModel.from_xml_path(str(emb.scene_xml))
-    body_ids = {model.body(name).id for name in emb.ee_bodies}
-    colors, areas = [], []
-    for g in range(model.ngeom):
-        rgba = _geom_rgba(model, g)
-        if model.geom_bodyid[g] not in body_ids or model.geom_group[g] not in _VISIBLE_GROUPS or rgba[3] == 0:
-            continue
-        colors.append(rgba[:3])
-        areas.append(_geom_surface_area(model, g))
-    return 255.0 * np.average(np.array(colors), axis=0, weights=np.array(areas))
-
-
-# ---------------------------------------------------------------------------
 # Target mask
 # ---------------------------------------------------------------------------
 
