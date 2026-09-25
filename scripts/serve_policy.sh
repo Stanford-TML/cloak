@@ -11,9 +11,12 @@ export MUJOCO_GL="${MUJOCO_GL:-egl}"
 # robot is chosen with EMBODIMENT: robotiq | sharpa | umi | yam. use_mask renders
 # that robot's wrist mask and use_ik retargets the action chunk to it (no-op for
 # robotiq). EMBODIMENT must match the client (deploy_policy.sh).
-CONFIG=pi05_full_droid_finetune_v3-1_ik
-EMBODIMENT=yam
-CHECKPOINT_DIR=/path/to/checkpoints/pi05_full_droid_finetune_v3-1/exp/100000/
+# Use pi05_full_droid_finetune_v3-1_ik for the Cloak-VLA policy from the paper (uses ik for tip pose retargeting). Used for unseen embodiments (sharpa, umi, or yam)
+# Use pi05_full_droid_finetune_v3-1 for Cloak-VLA without an IK layer. Works for seen embodiments (i.e. robotiq)
+# Use pi05_full_droid_finetune_v0 for the Pi05_droid finetune without IK. Intended for robotiq embodiment 
+CONFIG=pi05_full_droid_finetune_v0
+EMBODIMENT=robotiq
+CHECKPOINT_DIR=checkpoints/pi05_full_droid_finetune_v0/pi05_full_droid_finetune_v0/100000
 
 # Sharpa can optionally lock the hand and solve only the arm (see serve_policy.py).
 if [[ "${EMBODIMENT}" == "sharpa" ]]; then

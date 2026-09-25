@@ -6,12 +6,12 @@ set -euo pipefail
 
 # Debug/mock mode: "true" runs with a mock robot + blank cameras (no hardware),
 # to test the client↔server loop against a running server. "false" for real robots.
-DEBUG=true
+DEBUG=false
 
 # Which robot to drive. Must match the server's --embodiment (robotiq | sharpa |
 # umi | yam). "robotiq"/"sharpa" have client robot envs in this repo's deployment/;
 # umi/yam additionally require their client-side robot env.
-EMBODIMENT=sharpa
+EMBODIMENT=robotiq
 
 # Rollout length cap; 0 = run until Ctrl+C (900 ≈ 1 minute at 15 Hz).
 TIMESTEPS=0

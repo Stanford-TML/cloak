@@ -198,7 +198,7 @@ def _prompt_instruction(on_reset=None, on_cycle_gripper=None) -> Optional[str]:
         hints.append("g=cycle-gripper")
     options = ", ".join(hints)
     while True:
-        instruction = input(f"Enter instruction [{options}]: ").strip()
+        instruction = input(f"Enter a text instruction [or {options}]: ").strip()
         low = instruction.lower()
         if low == "q":
             return None

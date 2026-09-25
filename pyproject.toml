@@ -47,10 +47,11 @@ dev = [
 ]
 # Robot-side deploy client (deployment/deploy_policy.py + the vendored robot env in deployment/).
 # Runs on the robot workstation via `uv run --group client python deployment/deploy_policy.py`.
-# NOTE: pyzed (ZED SDK), the Sharpa hand SDK (vendored under SharpaWaveSDK_4.3.4/,
-# added to sys.path at runtime), and the Franka control API are hardware/driver
-# packages installed on the robot workstation — intentionally NOT listed here.
+# pyzed is the ZED SDK 5.1 Python API (wheel URL below; needs the ZED SDK 5.1
+# installed on the robot workstation). The Sharpa hand SDK (vendored under
+# SharpaWaveSDK_4.3.4/, added to sys.path at runtime) is NOT listed here.
 client = [
+    "pyzed==5.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "zerorpc>=0.6.3",
     "gym>=0.26.2",
     "moviepy>=1.0.3",
@@ -80,9 +81,11 @@ preprocess = [
 override-dependencies = [
     "ml-dtypes==0.5.0",   # jax 0.6.2 needs >=0.5.0; overrides tensorflow-cpu 2.15's lower pin
     "tensorstore==0.1.74",
+    "numpy>=1.22.4,<2.0.0",  # pyzed 5.1 declares numpy>=2 but runs fine on 1.26 (the pin above)
 ]
 
 [tool.uv.sources]
+pyzed = { url = "https://download.stereolabs.com/zedsdk/5.1/whl/linux_x86_64/pyzed-5.1-cp311-cp311-linux_x86_64.whl" }
 dlimp = { git = "https://github.com/kvablack/dlimp", rev = "ad72ce3a9b414db2185bc0b38461d4101a65477a" }
 
 [build-system]
