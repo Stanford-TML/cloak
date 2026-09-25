@@ -3,11 +3,11 @@
 # write deployment/calibration/calibration_info_<embodiment>.json (used by deploy_policy.sh).
 # Moves the arm: keep the workspace clear and the e-stop in hand.
 # Run: bash scripts/calibrate_wrist_camera.sh
-# Re-fit the last capture without the robot: bash scripts/calibrate_wrist_camera.sh --from-capture scratch/wrist_calibration/robotiq/frames.npz
+# Re-fit the last capture without the robot: bash scripts/calibrate_wrist_camera.sh --from-capture scratch/wrist_calibration/robotiq/frames_robotiq.npz
 set -euo pipefail
 
-# End effector being calibrated (only robotiq is supported so far).
-EMBODIMENT=robotiq
+# End effector being calibrated: robotiq | sharpa.
+EMBODIMENT=sharpa
 
 # Wrist ZED serial — must match WRIST_CAMERA_ID in deploy_policy.sh.
 WRIST_CAMERA_ID=14056440

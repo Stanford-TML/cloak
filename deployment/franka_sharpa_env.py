@@ -1,5 +1,6 @@
 """Franka arm + Sharpa hand env. Position control only. Replaces gripper with Sharpa hand."""
 
+import ctypes
 import os
 import sys
 import time
@@ -12,12 +13,20 @@ _sdk_path = os.path.join(_proj_root, "SharpaWaveSDK_4.3.4", "python")
 if _sdk_path not in sys.path:
     sys.path.insert(0, _sdk_path)
 
+# The SDK's sharpa.so links libpython3.X.so.1.0, which lives in the base Python's
+# lib/ (a uv venv has none, and the SDK only looks in the venv). Preload it so the
+# extension module can resolve it.
+_libpython = os.path.join(sys.base_prefix, "lib", f"libpython{sys.version_info.major}.{sys.version_info.minor}.so.1.0")
+if os.path.exists(_libpython):
+    ctypes.CDLL(_libpython)
+
 # The Sharpa SDK is only needed to drive the real hand. Import it lazily so
 # debug/mock mode (which leaves self._hand = None) runs with no SDK installed.
 try:
     from sharpa import SharpaWaveManager, ControlMode, ControlSource, HandSide
     _SHARPA_SDK_AVAILABLE = True
-except Exception:
+except Exception as e:
+    print(f"WARNING: Sharpa SDK import failed ({e!r}); the real Sharpa hand is unavailable.")
     SharpaWaveManager = ControlMode = ControlSource = HandSide = None
     _SHARPA_SDK_AVAILABLE = False
 
@@ -80,7 +89,7 @@ class FrankaSharpaEnv(RobotEnv):
             do_reset=False,
             use_cameras=use_cameras,
             use_gripper=False,
-            calibration_name="robotiq",  # Sharpa reuses the Robotiq calibration
+            calibration_name="sharpa",  # calibration_info_sharpa.json (scripts/calibrate_wrist_camera.sh)
             hand_camera_id=hand_camera_id,
             debug=debug,
             debug_camera_ids=debug_camera_ids,

@@ -37,7 +37,7 @@ class ServerInterface:
         if launch:
             func_list = [
                 lambda: self.launch_controller(self.gripper_kind),
-                lambda: self.launch_robot(),
+                lambda: self.launch_robot(self.use_gripper),
             ]
             attempt_n_times(func_list, max_attempts=2)
 
@@ -87,8 +87,10 @@ class ServerInterface:
         # NUC server signature: launch_controller(gripper_kind="robotiq_2f").
         self.server.launch_controller(gripper_kind)
 
-    def launch_robot(self):
-        self.server.launch_robot()
+    def launch_robot(self, use_gripper=True):
+        # NUC server signature: launch_robot(use_gripper=None). With use_gripper=False
+        # it skips the gripper, so get_robot_state doesn't query a missing gripper.
+        self.server.launch_robot(use_gripper)
 
     def update_command(self, command, action_space="cartesian_velocity", gripper_action_space="velocity", blocking=False):
         if self.debug:

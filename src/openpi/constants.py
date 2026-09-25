@@ -63,7 +63,6 @@ SHARPA_HAND_QPOS_CLOSED = np.array(
         1.348, 0.03, 0.1, 0.101,           # Index
         1.381, 0.027, 0.1, 0.101,          # Middle
         1.34, 0.025, 0.1, 0.101,           # Ring
-        # 0.162, 1.292, 0.167, 0.101, 0.102, # Pinky
         0.25, 1.5, 0.1, 0.101, 0.102, # Pinky
     ]
 )
@@ -103,6 +102,14 @@ def lerp_sharpa_hand_qpos(
         )
     g_eff = g * np.repeat(fw, SHARPA_FINGER_JOINT_COUNTS)
     return (1.0 - g_eff) * SHARPA_HAND_QPOS_OPEN + g_eff * SHARPA_HAND_QPOS_CLOSED
+
+
+def sharpa_gripper_from_hand_qpos(hand_qpos: np.ndarray) -> float:
+    """Inverse of `lerp_sharpa_hand_qpos`: project a 22-D hand qpos onto the
+    OPEN -> CLOSED line. Returns the gripper scalar clipped to [0, 1] (0 = open)."""
+    d = SHARPA_HAND_QPOS_CLOSED - SHARPA_HAND_QPOS_OPEN
+    g = np.dot(np.asarray(hand_qpos) - SHARPA_HAND_QPOS_OPEN, d) / np.dot(d, d)
+    return float(np.clip(g, 0.0, 1.0))
 
 
 # --- Agreed-upon client/server reset poses ---

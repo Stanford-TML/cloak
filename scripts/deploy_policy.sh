@@ -11,7 +11,7 @@ DEBUG=false
 # Which robot to drive. Must match the server's --embodiment (robotiq | sharpa |
 # umi | yam). "robotiq"/"sharpa" have client robot envs in this repo's deployment/;
 # umi/yam additionally require their client-side robot env.
-EMBODIMENT=robotiq
+EMBODIMENT=sharpa
 
 # Rollout length cap; 0 = run until Ctrl+C (900 ≈ 1 minute at 15 Hz).
 TIMESTEPS=0

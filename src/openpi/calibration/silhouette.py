@@ -14,8 +14,10 @@ batch job (preprocessing/preprocess_wrist_extrinsics.py) and the live-robot
 calibration (deployment/calibrate_wrist_camera.py).
 """
 
+from collections.abc import Callable
 import dataclasses
 import math
+from pathlib import Path
 from typing import Literal
 
 import cv2
@@ -24,7 +26,11 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation
 
-from openpi.constants import RLDS_H, RLDS_W, ROBOTIQ_SCENE_XML, lerp_gripper_qpos
+from openpi.constants import (
+    RLDS_H, RLDS_W, ROBOTIQ_SCENE_XML, SHARPA_SCENE_XML, UMI_SCENE_XML, YAM_LINEAR_SCENE_XML,
+    lerp_gripper_qpos, lerp_sharpa_hand_qpos,
+)
+from openpi.policies import gripper_mask_renderer as _renderers
 
 # Target-mask construction.
 OPEN_TOL = 0.05         # gripper_position <= this counts as "open"
@@ -32,6 +38,8 @@ ROI_TOP_FRAC = 0.50     # gripper lives in the bottom rows / right cols of the w
 ROI_LEFT_FRAC = 0.20
 BIN_KEEP_FRAC = 0.50    # keep the darkest / most-rigid half of the ROI
 MIN_KEEP_FRAMES = 1
+RIGID_FRAC = 0.05       # most-rigid fraction of pixels that locates the end effector
+RIGID_CROP_MARGIN = 10  # px of padding around the most-rigid pixels' bounding box ("rigid" crop)
 
 # Nelder-Mead settings.
 NM_MAXITER = 600
@@ -42,12 +50,23 @@ NM_INIT_R_STEP = 0.0087  # ~0.5 deg initial simplex spread (rotation)
 _COLLISION_GROUP = 3
 _SEG_HIDDEN_GROUP = 5
 
-# Robotiq 2F-85 bodies whose geoms form the gripper silhouette.
-_GRIPPER_BODY_NAMES = [
-    "base_mount", "2f85_base",
-    "right_driver", "right_coupler", "right_spring_link", "right_follower", "right_pad", "right_silicone_pad",
-    "left_driver", "left_coupler", "left_spring_link", "left_follower", "left_pad", "left_silicone_pad",
-]
+
+@dataclasses.dataclass(frozen=True)
+class Embodiment:
+    scene_xml: Path
+    ee_bodies: list[str]
+    """End-effector bodies whose geoms form the silhouette (same as its mask renderer)."""
+    ee_qpos: Callable[[float], np.ndarray]
+    """Gripper scalar (0 = open, 1 = closed) -> end-effector qpos (qpos[arm_dof:])."""
+    arm_dof: int = 7
+
+
+EMBODIMENTS = {
+    "robotiq": Embodiment(ROBOTIQ_SCENE_XML, _renderers._GRIPPER_BODY_NAMES, lerp_gripper_qpos),
+    "sharpa": Embodiment(SHARPA_SCENE_XML, _renderers._HAND_BODY_NAMES, lerp_sharpa_hand_qpos),
+    "umi": Embodiment(UMI_SCENE_XML, _renderers._UMI_GRIPPER_BODY_NAMES, _renderers._umi_finger_qpos),
+    "yam": Embodiment(YAM_LINEAR_SCENE_XML, _renderers._YAM_GRIPPER_BODY_NAMES, _renderers._yam_finger_qpos, arm_dof=6),
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -56,6 +75,14 @@ class CalibOptions:
     """Target-mask cue: low intensity, low temporal std, or their intersection."""
     keep_frac: float = BIN_KEEP_FRAC
     """Fraction of ROI pixels kept by each cue's percentile threshold."""
+    ee_color: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """End-effector RGB (0-255), e.g. from `estimate_ee_color`. The intensity cue keeps the
+    pixels whose per-pixel median RGB is closest to it; the default black keeps the
+    darkest pixels."""
+    crop: Literal["fixed", "rigid"] = "fixed"
+    """Region the target mask is restricted to: "fixed" = the bottom-right of the wrist
+    view, where a Robotiq sits; "rigid" = the bounding box of the most rigid pixels
+    (e.g. Sharpa, which is mounted off to the side)."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -72,11 +99,12 @@ class Target:
 # ---------------------------------------------------------------------------
 
 class Sim:
-    """Franka FR3 + Robotiq 2F-85 forward kinematics and wrist-cam segmentation."""
+    """Arm + end-effector forward kinematics and wrist-cam segmentation of the end effector."""
 
     EE_SITE = "attachment_site"  # DROID end-effector frame (link7 + 0.107 m on z).
 
-    def __init__(self) -> None:
+    def __init__(self, embodiment: str = "robotiq") -> None:
+        self.embodiment = EMBODIMENTS[embodiment]
         self.model = self._build_model()
         self.data = mujoco.MjData(self.model)
         self.renderer = mujoco.Renderer(self.model, height=RLDS_H, width=RLDS_W)
@@ -90,24 +118,25 @@ class Sim:
             self._opt.geomgroup[_SEG_HIDDEN_GROUP] = 0
         except KeyError:
             pass
-        ids = {self.model.body(n).id for n in _GRIPPER_BODY_NAMES}
+        ids = {self.model.body(n).id for n in self.embodiment.ee_bodies}
         self.gripper_geom_ids = np.array(
             [i for i in range(self.model.ngeom) if self.model.geom_bodyid[i] in ids])
         self._cam_id = self.model.cam("wrist_cam").id
         self._ee_site_id = self.model.site(self.EE_SITE).id
 
     def _build_model(self) -> mujoco.MjModel:
-        spec = mujoco.MjSpec.from_file(str(ROBOTIQ_SCENE_XML))
+        spec = mujoco.MjSpec.from_file(str(self.embodiment.scene_xml))
         cam = spec.worldbody.add_camera()
         cam.name = "wrist_cam"
         cam.fovy = 60.0  # placeholder; overwritten per render
         return spec.compile()
 
     def set_pose(self, joint_position: np.ndarray, gripper_position: float) -> np.ndarray:
-        """Set arm + gripper qpos, run FK, return the 4x4 end-effector pose in world."""
+        """Set arm + end-effector qpos, run FK, return the 4x4 end-effector pose in world."""
         mujoco.mj_resetData(self.model, self.data)
-        self.data.qpos[:7] = joint_position
-        self.data.qpos[7:] = lerp_gripper_qpos(gripper_position)
+        a = self.embodiment.arm_dof
+        self.data.qpos[:a] = joint_position
+        self.data.qpos[a:] = self.embodiment.ee_qpos(gripper_position)
         self.data.qvel[:] = 0.0
         mujoco.mj_forward(self.model, self.data)
         T = np.eye(4)
@@ -138,21 +167,96 @@ class Sim:
 
 
 # ---------------------------------------------------------------------------
+# End-effector color
+# ---------------------------------------------------------------------------
+
+_VISIBLE_GROUPS = (0, 1, 2)  # MuJoCo's default-visible geom groups (collision proxies sit in 3)
+_DEFAULT_GEOM_RGBA = np.array([0.5, 0.5, 0.5, 1.0])
+
+
+def _geom_surface_area(model: mujoco.MjModel, g: int) -> float:
+    """Surface area (m^2) of geom `g`; 0 for types we don't weight (planes, hfields, ...)."""
+    t, (s0, s1, s2) = model.geom_type[g], model.geom_size[g]
+    if t == mujoco.mjtGeom.mjGEOM_MESH:
+        m = model.geom_dataid[g]
+        verts = model.mesh_vert[model.mesh_vertadr[m]:model.mesh_vertadr[m] + model.mesh_vertnum[m]]
+        faces = model.mesh_face[model.mesh_faceadr[m]:model.mesh_faceadr[m] + model.mesh_facenum[m]]
+        a, b, c = verts[faces[:, 0]], verts[faces[:, 1]], verts[faces[:, 2]]
+        return float(0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1).sum())
+    if t == mujoco.mjtGeom.mjGEOM_BOX:
+        return 8.0 * (s0 * s1 + s1 * s2 + s0 * s2)
+    if t == mujoco.mjtGeom.mjGEOM_SPHERE:
+        return 4.0 * np.pi * s0**2
+    if t == mujoco.mjtGeom.mjGEOM_CAPSULE:
+        return 4.0 * np.pi * s0 * s1 + 4.0 * np.pi * s0**2
+    if t == mujoco.mjtGeom.mjGEOM_CYLINDER:
+        return 4.0 * np.pi * s0 * s1 + 2.0 * np.pi * s0**2
+    return 0.0
+
+
+def _geom_rgba(model: mujoco.MjModel, g: int) -> np.ndarray:
+    """The color MuJoCo draws geom `g` with: its material's rgba unless the geom sets its own."""
+    rgba = model.geom_rgba[g]
+    if model.geom_matid[g] >= 0 and np.allclose(rgba, _DEFAULT_GEOM_RGBA):
+        return model.mat_rgba[model.geom_matid[g]]
+    return rgba
+
+
+def ee_mean_color(embodiment: str) -> np.ndarray:
+    """Surface-area-weighted mean RGB (0-255) of the embodiment's visible end-effector
+    geoms, from the model's rgba/material colors.
+
+    These are the modeler's display colors, not measured albedo: pixel values in a
+    real image also depend on lighting, exposure and white balance.
+    """
+    emb = EMBODIMENTS[embodiment]
+    model = mujoco.MjModel.from_xml_path(str(emb.scene_xml))
+    body_ids = {model.body(name).id for name in emb.ee_bodies}
+    colors, areas = [], []
+    for g in range(model.ngeom):
+        rgba = _geom_rgba(model, g)
+        if model.geom_bodyid[g] not in body_ids or model.geom_group[g] not in _VISIBLE_GROUPS or rgba[3] == 0:
+            continue
+        colors.append(rgba[:3])
+        areas.append(_geom_surface_area(model, g))
+    return 255.0 * np.average(np.array(colors), axis=0, weights=np.array(areas))
+
+
+# ---------------------------------------------------------------------------
 # Target mask
 # ---------------------------------------------------------------------------
 
-def _select_kept_gray(gripper_positions: np.ndarray, frames: np.ndarray):
-    """Grayscale (K, H, W) of the gripper-open frames, or None if too few."""
+def _select_kept(gripper_positions: np.ndarray, frames: np.ndarray):
+    """RGB frames (K, H, W, 3) of the gripper-open steps, or None if too few."""
     keep = np.asarray(gripper_positions) <= OPEN_TOL
     if int(keep.sum()) < MIN_KEEP_FRAMES:
         return None
-    return np.stack([cv2.cvtColor(f, cv2.COLOR_RGB2GRAY) for f in frames[keep]]).astype(np.float32)
+    return frames[keep]
 
 
-def _gripper_roi(H: int, W: int) -> np.ndarray:
-    roi = np.ones((H, W), dtype=bool)
-    roi[: int(H * ROI_TOP_FRAC), :] = False
-    roi[:, : int(W * ROI_LEFT_FRAC)] = False
+def _temporal_std(kept: np.ndarray) -> np.ndarray:
+    """Per-pixel grayscale std (H, W) across the RGB frames `kept`."""
+    return np.stack([cv2.cvtColor(f, cv2.COLOR_RGB2GRAY) for f in kept]).std(axis=0)
+
+
+def _most_rigid(std: np.ndarray, region: np.ndarray) -> np.ndarray:
+    """The most rigid RIGID_FRAC of `region`'s pixels. The end effector moves with the
+    camera, so its pixels barely change across frames while the background does."""
+    return (std <= np.percentile(std[region], 100 * RIGID_FRAC)) & region
+
+
+def _gripper_roi(std: np.ndarray, crop: str) -> np.ndarray:
+    """Where the end effector can be: "fixed" = the bottom-right of the wrist view (where
+    a Robotiq sits); "rigid" = the padded bounding box of the most rigid pixels."""
+    H, W = std.shape
+    roi = np.zeros((H, W), dtype=bool)
+    if crop == "fixed":
+        roi[int(H * ROI_TOP_FRAC):, int(W * ROI_LEFT_FRAC):] = True
+    else:
+        ys, xs = np.nonzero(_most_rigid(std, np.ones((H, W), dtype=bool)))
+        (y0, y1), (x0, x1) = np.percentile(ys, [1, 99]).astype(int), np.percentile(xs, [1, 99]).astype(int)
+        m = RIGID_CROP_MARGIN
+        roi[max(y0 - m, 0):y1 + m + 1, max(x0 - m, 0):x1 + m + 1] = True
     return roi
 
 
@@ -163,19 +267,29 @@ def _threshold_mask(score: np.ndarray, roi: np.ndarray, keep_frac: float) -> np.
 
 
 def build_target_mask(gripper_positions: np.ndarray, frames: np.ndarray, opts: CalibOptions = CalibOptions()):
-    """Gripper target mask from the gripper-open RGB `frames` (N, H, W, 3), in the
-    gripper ROI. None if too few open frames."""
-    gray = _select_kept_gray(gripper_positions, frames)
-    if gray is None:
+    """Pseudo-GT gripper mask from the gripper-open RGB `frames` (N, H, W, 3): pixels in
+    the gripper ROI whose median color is close to `opts.ee_color` (intensity cue)
+    and/or that barely change across frames (std cue). None if too few open frames."""
+    kept = _select_kept(gripper_positions, frames)
+    if kept is None:
         return None
-    roi = _gripper_roi(*gray.shape[1:])
-    if opts.cue == "intensity":
-        return _threshold_mask(np.median(gray, axis=0), roi, opts.keep_frac)
-    if opts.cue == "std":
-        return _threshold_mask(gray.std(axis=0), roi, opts.keep_frac)
-    intensity = _threshold_mask(np.median(gray, axis=0), roi, opts.keep_frac)
-    std = _threshold_mask(gray.std(axis=0), roi, opts.keep_frac)
-    return intensity & std
+    std = _temporal_std(kept)
+    roi = _gripper_roi(std, opts.crop)
+
+    color_dist = np.linalg.norm(np.median(kept, axis=0) - opts.ee_color, axis=-1)
+    intensity = _threshold_mask(color_dist, roi, opts.keep_frac)
+    rigid = _threshold_mask(std, roi, opts.keep_frac)
+
+    return {"intensity": intensity, "std": rigid, "intersection": intensity & rigid}[opts.cue]
+
+
+def estimate_ee_color(gripper_positions: np.ndarray, frames: np.ndarray, crop: str = "fixed") -> np.ndarray:
+    """End-effector RGB (0-255) measured from the gripper-open RGB `frames`: the median
+    color of the most rigid pixels in the gripper ROI."""
+    kept = _select_kept(gripper_positions, frames)
+    std = _temporal_std(kept)
+    rigid = _most_rigid(std, _gripper_roi(std, crop))
+    return np.median(np.median(kept, axis=0)[rigid], axis=0)
 
 
 def first_open_step(gripper_positions: np.ndarray) -> int:
