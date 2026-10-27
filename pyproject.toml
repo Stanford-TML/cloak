@@ -41,6 +41,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # Hardware-free deployment tests import these client interfaces.
+    "gym>=0.26.2",
+    "zerorpc>=0.6.3",
+    "moviepy>=2.0",
     "pytest>=8.3.4",
     "ruff>=0.8.6",
     "matplotlib>=3.10.0",
@@ -54,7 +58,7 @@ client = [
     "pyzed==5.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "zerorpc>=0.6.3",
     "gym>=0.26.2",
-    "moviepy>=1.0.3",
+    "moviepy>=2.0",
     "matplotlib>=3.10.0",
     "tqdm>=4.66.0",
 ]
@@ -97,7 +101,7 @@ packages = ["src/openpi", "src/openpi_client"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "preprocessing"]
+pythonpath = [".", "src", "preprocessing"]
 
 [tool.ruff]
 line-length = 120

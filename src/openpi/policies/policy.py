@@ -37,6 +37,7 @@ class Policy(BasePolicy):
             sample_kwargs: Additional keyword arguments to pass to model.sample_actions.
             metadata: Additional metadata to store with the policy.
         """
+        self.debug_masks = False
         self._model = model
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
@@ -78,6 +79,12 @@ class Policy(BasePolicy):
         outputs = jax.tree.map(lambda x: np.array(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
+        # Return the source-resolution mask actually passed into this inference.
+        # The model subsequently resizes/pads it and applies patch masking.
+        pixel_masks = inputs.get("pixel_mask", {})
+        if self.debug_masks and "left_wrist_0_rgb" in pixel_masks:
+            outputs["wrist_mask"] = np.asarray(pixel_masks["left_wrist_0_rgb"][0], dtype=bool)
+
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,
         }

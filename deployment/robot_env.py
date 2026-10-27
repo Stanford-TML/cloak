@@ -20,7 +20,7 @@ class _NoCameraReader:
 
 
 class RobotEnv(gym.Env):
-    def __init__(self, action_space="joint_position", gripper_action_space=None, camera_kwargs={}, do_reset=True, use_cameras=True, use_gripper=True, gripper_kind="robotiq_2f", calibration_name="robotiq", hand_camera_id=None, debug=False, debug_camera_ids=None):
+    def __init__(self, action_space="joint_position", gripper_action_space=None, camera_kwargs={}, do_reset=True, use_cameras=True, use_gripper=True, gripper_kind="robotiq_2f", calibration_name="robotiq", hand_camera_id=None, calibration_lens="left", debug=False, debug_camera_ids=None):
         # Initialize Gym Environment
         super().__init__()
 
@@ -38,6 +38,9 @@ class RobotEnv(gym.Env):
         self.action_space = action_space
         self.gripper_action_space = gripper_action_space
         self.check_action_range = "velocity" in action_space
+
+        # Validate before any connection, controller launch, or camera initialization.
+        self.calibration_dict = load_calibration_info(name=calibration_name, camera_id=hand_camera_id, lens=calibration_lens)
 
         # Robot Configuration
         # DROID_ARM_QPOS is imported from openpi.constants (the single source of
@@ -66,7 +69,6 @@ class RobotEnv(gym.Env):
             )
         else:
             self.camera_reader = _NoCameraReader()
-        self.calibration_dict = load_calibration_info(name=calibration_name)
 
         # Reset Robot
         if do_reset:
@@ -136,7 +138,7 @@ class RobotEnv(gym.Env):
         # cam-to-base itself from joint_position, so we no longer derive it here.
         extrinsics = deepcopy(self.calibration_dict)
         for cam_id in self.calibration_dict:
-            if self.hand_camera_id not in cam_id:
+            if not cam_id.startswith(f"{self.hand_camera_id}_"):
                 continue
             extrinsics[cam_id + "_gripper_offset"] = extrinsics[cam_id]
         return extrinsics

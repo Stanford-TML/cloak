@@ -1,0 +1,26 @@
+--- a/robotiq_gripper_client.py
++++ b/robotiq_gripper_client.py
+@@ -47,14 +47,15 @@
+         time.sleep(1)
+         self.gripper.activate_gripper()
+         self.gripper.sendCommand()
+-        if (
+-            self.gripper.is_ready()
+-            and self.gripper.sendCommand()
+-            and self.gripper.getStatus()
+-        ):
+-            print("Activated.")
+-        else:
+-            raise Exception(f"Unable to activate!")
++        # Activation is asynchronous. Refresh status before inspecting readiness.
++        deadline = time.monotonic() + 10.0
++        while True:
++            if self.gripper.getStatus() and self.gripper.is_ready():
++                print("Activated.")
++                break
++            if time.monotonic() >= deadline:
++                raise RuntimeError("Robotiq activation timed out after 10 seconds")
++            time.sleep(0.1)
+ 
+         # Connect to server
+         self.channel = grpc.insecure_channel(f"{server_ip}:{server_port}")

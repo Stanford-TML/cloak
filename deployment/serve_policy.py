@@ -69,6 +69,9 @@ class Args:
     # prompt.
     default_prompt: str | None = None
 
+    # Return source pixel masks for episode recording.
+    debug_masks: bool = False
+
     # Port to serve the policy on.
     port: int = 8000
 
@@ -139,6 +142,8 @@ def main(args: Args) -> None:
         default_prompt=args.default_prompt,
     )
 
+    policy.debug_masks = args.debug_masks
+
     assert not any(
         isinstance(t, MaskAugmentation) for t in policy._input_transform.transforms
     ), "MaskAugmentation must not run at serve time."
@@ -149,6 +154,7 @@ def main(args: Args) -> None:
     policy_metadata = {
         **policy.metadata,
         "config": config_name,
+        "debug_masks": args.debug_masks,
         "checkpoint_dir": "<random-weights>" if is_random else args.policy.dir,
     }
 

@@ -117,7 +117,7 @@ class Args:
 
     # Which robot to drive: "sharpa" (arm + Sharpa hand) or "robotiq" (arm +
     # Robotiq 2F gripper). Must match the served checkpoint's embodiment.
-    embodiment: str = "sharpa"  # "sharpa" or "robotiq"
+    embodiment: str = "sharpa"  # robotiq, umi, or sharpa
 
     # Debug/mock mode: no robot, no cameras — default robot state + blank images.
     # Exercises the full client↔server loop against a running server, no hardware.
@@ -133,6 +133,7 @@ class Args:
     open_loop_horizon: int = 8
 
     # Sharpa hand parameters
+    wrist_extrinsic_override_path: str = ""  # Experimental composed camera-to-flange pose (.npy).
     hand_spec: str = "sharpa_R"  # "sharpa_R" or "sharpa_L"
 
     # Action space: "joint_position" (default) or "cartesian_position" (pose).
@@ -206,19 +207,29 @@ def _prompt_instruction(on_reset=None, on_cycle_gripper=None) -> Optional[str]:
             on_reset()
             continue
         if low == "g" and on_cycle_gripper is not None:
-            on_cycle_gripper()
+            if on_cycle_gripper() is False:
+                print("Gripper check failed. Inspect the NUC and gripper before starting a rollout.")
             continue
         if instruction:
             return instruction
 
 
 def main(args: Args):
-    assert args.embodiment in ("sharpa", "robotiq"), (
-        f"--embodiment must be 'sharpa' or 'robotiq', got {args.embodiment}"
+    wrist_override = None
+    if args.wrist_extrinsic_override_path:
+        wrist_override = np.load(args.wrist_extrinsic_override_path, allow_pickle=False)
+        if wrist_override.shape != (6,) or not np.isfinite(wrist_override).all():
+            raise ValueError("Extrinsic override must be six finite xyz/Euler values")
+        print(f"EXPERIMENTAL camera-to-flange override: {args.wrist_extrinsic_override_path}")
+    assert args.embodiment in ("sharpa", "robotiq", "umi"), (
+        f"--embodiment must be 'sharpa', 'robotiq', or 'umi', got {args.embodiment}"
     )
     assert args.wrist_cam_lens in ("left", "right"), (
         f"--wrist-cam-lens must be 'left' or 'right', got {args.wrist_cam_lens}"
     )
+
+    from deployment.calibration.calibration_utils import load_calibration_info
+    load_calibration_info(name=args.embodiment, camera_id=args.wrist_camera_id, lens=args.wrist_cam_lens)
 
     # Initialize the robot environment for the chosen embodiment.
     debug_camera_ids = [args.external_camera_id, args.wrist_camera_id]
@@ -231,21 +242,25 @@ def main(args: Args):
             use_cameras=True,
             do_reset=True,
             hand_camera_id=args.wrist_camera_id,
+            calibration_lens=args.wrist_cam_lens,
             debug=args.debug,
             debug_camera_ids=debug_camera_ids,
         )
         print(f"Created the FrankaSharpaEnv (arm + Sharpa hand) with action_space={args.action_space}!")
     else:
-        env = RobotEnv(
+        from deployment.franka_umi_env import FrankaUMIEnv
+        env_class = FrankaUMIEnv if args.embodiment == "umi" else RobotEnv
+        env = env_class(
             action_space=args.action_space,
             gripper_action_space="position",
             use_cameras=True,
             do_reset=True,
             hand_camera_id=args.wrist_camera_id,
+            calibration_lens=args.wrist_cam_lens,
             debug=args.debug,
             debug_camera_ids=debug_camera_ids,
         )
-        print(f"Created the RobotEnv (arm + Robotiq gripper) with action_space={args.action_space}!")
+        print(f"Created {type(env).__name__} (arm + {args.embodiment}) with action_space={args.action_space}!")
     if args.debug:
         print(f"{BLUE}=== DEBUG MODE: mock robot + blank cameras, no hardware ==={RESET}")
 
@@ -280,6 +295,9 @@ def main(args: Args):
         # Prepare to save video of rollout
         timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H:%M:%S")
         video = []
+        mask_video = []
+        mask_samples, mask_inputs, mask_steps = [], [], []
+        inference_wrist, inference_mask = None, None
         step_iter = itertools.count() if args.max_timesteps <= 0 else range(args.max_timesteps)
         print("Running rollout... press Ctrl+C to stop early.")
         print("Type a new instruction + Enter at any time to retarget the policy mid-rollout.")
@@ -333,12 +351,27 @@ def main(args: Args):
                     # Raw cam-to-gripper; the server FK-composes it with the EE
                     # pose to get cam-to-base.
                     request_data["observation/wrist_extrinsic_cam_to_gripper"] = (
-                        np.asarray(curr_obs["camera_extrinsic_cam_to_gripper"], dtype=np.float64)
+                        np.asarray(wrist_override if wrist_override is not None else curr_obs["camera_extrinsic_cam_to_gripper"], dtype=np.float64)
                     )
 
                     # Delay Ctrl+C until the server call returns (see contextmanager).
                     with prevent_keyboard_interrupt():
-                        pred_action_chunk = policy_client.infer(request_data)["actions"]
+                        response = policy_client.infer(request_data)
+                        pred_action_chunk = response["actions"]
+                        inference_mask = response.get("wrist_mask")
+                        inference_wrist = request_data["observation/wrist_image"].copy()
+                        if inference_mask is not None:
+                            mask_samples.append(np.asarray(inference_mask, dtype=bool).copy())
+                            mask_inputs.append(inference_wrist.copy())
+                            mask_steps.append(t_step)
+                        if inference_mask is None and t_step == 0:
+                            print("Server did not return a mask. Restart the updated policy server for mask recording.")
+
+                from deployment.recording import diagnostic_frame
+                if inference_mask is not None:
+                    mask_video.append(diagnostic_frame(
+                        curr_obs["external_image"], curr_obs["wrist_image"], inference_wrist, inference_mask
+                    ))
 
                 # Select current action to execute from chunk. Sharpa hand emits
                 # 29-dim actions (7 arm + 22 hand qpos) — passed through as-is.
@@ -367,7 +400,14 @@ def main(args: Args):
             label_part = f"{label}_" if label else ""
             save_filename = f"{deploy_part}{label_part}{timestamp}"
             save_path = str(video_dir / f"{save_filename}.mp4")
-            ImageSequenceClip(list(np.stack(video)), fps=10).write_videofile(save_path, codec="libx264")
+            ImageSequenceClip(list(np.stack(video)), fps=DROID_CONTROL_FREQUENCY).write_videofile(save_path, codec="libx264")
+            if mask_video:
+                mask_path = str(video_dir / f"{save_filename}_mask.mp4")
+                ImageSequenceClip(mask_video, fps=DROID_CONTROL_FREQUENCY).write_videofile(mask_path, codec="libx264")
+                np.savez_compressed(video_dir / f"{save_filename}_masks.npz",
+                    masks=np.stack(mask_samples), wrist_images=np.stack(mask_inputs),
+                    control_steps=np.asarray(mask_steps), fps=DROID_CONTROL_FREQUENCY)
+                print(f"Saved diagnostic video: {mask_path}")
 
 
 def _extract_observation(args: Args, obs_dict, *, save_to_disk=False):
@@ -375,9 +415,9 @@ def _extract_observation(args: Args, obs_dict, *, save_to_disk=False):
     external_image, wrist_image = None, None
     for key in image_observations:
         # "left" = left lens of the stereo pair; the model only trains on those.
-        if args.external_camera_id in key and "left" in key:
+        if key == f"{args.external_camera_id}_left":
             external_image = image_observations[key]
-        elif args.wrist_camera_id in key and f"_{args.wrist_cam_lens}" in key:
+        elif key == f"{args.wrist_camera_id}_{args.wrist_cam_lens}":
             wrist_image = image_observations[key]
 
     assert wrist_image is not None, (
@@ -413,19 +453,24 @@ def _extract_observation(args: Args, obs_dict, *, save_to_disk=False):
     camera_extrinsic_cam_to_gripper = None
     if "camera_extrinsics" in obs_dict:
         for key, val in obs_dict["camera_extrinsics"].items():
-            if (args.wrist_camera_id in key
-                    and key.endswith(f"_{args.wrist_cam_lens}_gripper_offset")):
+            if key == f"{args.wrist_camera_id}_{args.wrist_cam_lens}_gripper_offset":
                 camera_extrinsic_cam_to_gripper = np.array(val)
     assert camera_extrinsic_cam_to_gripper is not None, (
         f"Wrist cam-to-gripper extrinsic for {args.wrist_camera_id}_{args.wrist_cam_lens} not found"
     )
 
-    # Intrinsics from the Stereolabs calibration API (same source as preprocess_data.py).
-    # In debug mode there's no ZED conf on disk, so use the DROID-mean default.
+    # Match calibration: use the rectified intrinsics reported by the live SDK,
+    # not a separate factory calibration file fetched from Stereolabs.
     if args.debug:
         camera_intrinsic = DEFAULT_WRIST_INTRINSICS
     else:
-        camera_intrinsic = fetch_intrinsics(args.wrist_camera_id, args.wrist_cam_lens)
+        key = f"{args.wrist_camera_id}_{args.wrist_cam_lens}"
+        matrix = np.asarray(obs_dict["camera_intrinsics"][key], dtype=float)
+        h, w = wrist_image.shape[:2]
+        camera_intrinsic = np.array([matrix[0, 0]*320/w, matrix[1, 1]*180/h,
+                                     matrix[0, 2]*320/w, matrix[1, 2]*180/h])
+        if not np.isfinite(camera_intrinsic).all() or np.any(camera_intrinsic[:2] <= 0):
+            raise ValueError("Invalid wrist camera intrinsics from ZED SDK")
 
     return {
         "external_image": external_image,

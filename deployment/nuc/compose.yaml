@@ -1,0 +1,23 @@
+# Stage separately from an existing controller. Do not run both on the same ports.
+name: cloak-nuc
+services:
+  controller:
+    image: ${CLOAK_NUC_IMAGE:?Set an explicitly verified DROID NUC image reference}
+    network_mode: host
+    privileged: true
+    cap_add: [SYS_NICE]
+    ulimits:
+      rtprio: 99
+      memlock: -1
+    environment:
+      ROBOT_IP: ${ROBOT_IP:?Set the arm controller IP}
+      ROBOTIQ_PORT: ${ROBOTIQ_PORT:-/dev/ttyUSB0}
+    volumes:
+      - /dev:/dev
+      - .:/cloak-nuc:ro
+      - ./franka_hardware.yaml:/app/droid/fairo/polymetis/polymetis/conf/robot_client/franka_hardware.yaml:ro
+      - ./franka_panda.yaml:/app/droid/fairo/polymetis/polymetis/conf/robot_model/franka_panda.yaml:ro
+      - ./franka_hand.yaml:/app/droid/fairo/polymetis/polymetis/conf/gripper/franka_hand.yaml:ro
+    working_dir: /app
+    entrypoint: ["/bin/bash", "/cloak-nuc/launch_server.sh"]
+    restart: "no"

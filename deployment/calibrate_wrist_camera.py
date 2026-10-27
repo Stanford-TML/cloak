@@ -1,4 +1,4 @@
-"""Silhouette-calibrate the wrist camera on the real Franka (Robotiq or Sharpa hand).
+"""Silhouette-calibrate the wrist camera on the real Franka (Robotiq, UMI, or Sharpa hand).
 
 Moves the arm to the embodiment's home qpos, opens the gripper/hand, sweeps the
 arm through a few poses around home grabbing one wrist frame (left lens) per
@@ -13,7 +13,6 @@ Re-fit a saved capture without the robot: add --from-capture scratch/wrist_calib
 """
 
 import dataclasses
-import json
 import os
 from pathlib import Path
 import sys
@@ -34,13 +33,11 @@ import numpy as np
 from PIL import Image
 import tyro
 
-from deployment.calibration.calibration_utils import calib_info_path
+from deployment.calibration.calibration_utils import save_calibration_info
 from deployment.deploy_policy import _resize_no_pad
-from deployment.deploy_policy import fetch_intrinsics
-from deployment.misc.parameters import nuc_ip
 from openpi.calibration import silhouette
 from openpi.constants import (
-    DEFAULT_CAM_TO_GRIPPER, DROID_ARM_QPOS, RLDS_H, RLDS_W, SHARPA_ARM_QPOS, SHARPA_HAND_QPOS_OPEN,
+    DEFAULT_CAM_TO_GRIPPER, DROID_ARM_QPOS, RLDS_H, RLDS_W, SHARPA_ARM_QPOS, SHARPA_HAND_QPOS_OPEN, UMI_ARM_QPOS,
     sharpa_gripper_from_hand_qpos,
 )
 
@@ -48,7 +45,7 @@ from openpi.constants import (
 OUTPUT_ROOT = REPO_ROOT / "scratch" / "wrist_calibration"
 
 # Home arm qpos per embodiment: the pose its deploy client resets to.
-HOME_QPOS = {"robotiq": DROID_ARM_QPOS, "sharpa": SHARPA_ARM_QPOS}
+HOME_QPOS = {"robotiq": DROID_ARM_QPOS, "sharpa": SHARPA_ARM_QPOS, "umi": UMI_ARM_QPOS}
 
 
 
@@ -59,12 +56,15 @@ HOME_QPOS = {"robotiq": DROID_ARM_QPOS, "sharpa": SHARPA_ARM_QPOS}
 # _CAM_OFFSET_6DOF["sharpa"] = [0.134, -0.022, 0.006, deg(2.0, 20.5, 19.5)].
 INIT_CAM_TO_GRIPPER = {
     "robotiq": DEFAULT_CAM_TO_GRIPPER,
+    # Seed only: recovered from hand_droid calibration_info_umi.json, left lens.
+    # It belonged to a different camera; always fit/save this rig's own capture.
+    "umi": np.array([-0.04347603, 0.07423377, 0.00086389, -0.31998962, -0.04155331, -2.34386954]),
     "sharpa": np.array([-0.0973, -0.1003, 0.022, -0.3038, 0.4428, -1.3705]),
 }
 
 # Region the pseudo-GT is cropped to: the bottom-right of the wrist view, where a
 # Robotiq sits, or (Sharpa, mounted off to the side) the box around the most rigid pixels.
-CROP = {"robotiq": "fixed", "sharpa": "rigid"}
+CROP = {"robotiq": "fixed", "sharpa": "rigid", "umi": "rigid"}
 
 # Joint offsets (rad) from the home qpos: a j1 (base yaw) x j7 (wrist
 # roll) grid, which keeps the gripper at a constant height, so the background changes
@@ -80,11 +80,17 @@ AXIS_LENGTH, AXIS_WIDTH = 0.05, 0.004  # camera-frame axes (m)
 @dataclasses.dataclass
 class Args:
     # Wrist ZED serial (the SN<serial> file under /usr/local/zed/settings/).
-    wrist_camera_id: str
+    wrist_camera_id: str = ""
     # End effector being calibrated; selects calibration_info_<embodiment>.json.
     embodiment: str = "robotiq"
     # Skip the robot and re-fit a capture saved by a previous run.
     from_capture: Path | None = None
+    # Refit frames_<embodiment>.npz from this folder without hardware.
+    captures: Path | None = None
+    # Refit this rig's saved capture without connecting to hardware.
+    resume: bool = False
+    # Silhouette initialization currently supports the left lens only.
+    lens: str = "left"
 
 
 def _connect_sharpa_hand():
@@ -100,66 +106,86 @@ def _connect_sharpa_hand():
     return hand
 
 
-def capture(serial: str, embodiment: str) -> dict:
-    """Sweep the arm with the gripper/hand open and record wrist frames + robot state.
-
-    Sharpa's 22-D hand qpos is stored as the gripper scalar of the OPEN -> CLOSED
-    lerp, so the same open-frame filter and sim rendering apply to both.
-    """
-    from deployment.camera_utils.wrappers.multi_camera_wrapper import MultiCameraWrapper
-
-    # The NUC only polls/drives the gripper for Robotiq; the Sharpa hand is driven here via
-    # its SDK. The NUC controller config (gripper_kind) stays Robotiq, as in RobotEnv.
-    use_gripper = embodiment == "robotiq"
-    if nuc_ip is None:
-        from franka.robot import FrankaRobot
-
-        robot = FrankaRobot(use_gripper=use_gripper)
-    else:
-        from deployment.misc.server_interface import ServerInterface
-
-        robot = ServerInterface(ip_address=nuc_ip, use_gripper=use_gripper)
-    hand = _connect_sharpa_hand() if embodiment == "sharpa" else None
-    camera = MultiCameraWrapper().camera_dict[serial]
-    home = HOME_QPOS[embodiment]
-
-    if input(f"Move to home, then sweep the arm through {len(SWEEP_OFFSETS)} poses? [y/N]: ").strip().lower() != "y":
-        raise SystemExit("Aborted.")
-    # Blocking joint moves are smooth interpolated moves (same call as RobotEnv.reset).
-    print("Moving to the home qpos.")
-    robot.update_joints(home, velocity=False, blocking=True)
-    if hand is None:
-        robot.update_gripper(0, velocity=False, blocking=True)  # 0 = open
-    else:
-        hand.set_joint_position(SHARPA_HAND_QPOS_OPEN.tolist(), True)
-        time.sleep(1.0)
-
-    frames, joint_positions, gripper_positions = [], [], []
-    for offset in SWEEP_OFFSETS:
-        robot.update_joints(home + offset, velocity=False, blocking=True)
-        time.sleep(0.5)
+def require_open_gripper(robot, timeout=5.0):
+    """Reject failed opening before any arm motion; never assume commands succeeded."""
+    deadline = time.monotonic() + timeout
+    while True:
         state, _ = robot.get_robot_state()
-        for _ in range(3):  # flush stale frames buffered during the move
-            image = camera.read_camera()[0]["image"][f"{serial}_left"]
-        rgb = image[..., :3][..., ::-1]  # BGRA -> RGB, then the same resize the deploy client uses
-        frames.append(_resize_no_pad(rgb, RLDS_H, RLDS_W))
-        joint_positions.append(state["joint_positions"])
-        if hand is None:
-            gripper_positions.append(state["gripper_position"])
-        else:
-            _, hand_qpos = hand.get_joint_position_rad()
-            gripper_positions.append(sharpa_gripper_from_hand_qpos(np.asarray(hand_qpos)[:22]))
-    print("Returning to the home qpos.")
-    robot.update_joints(home, velocity=False, blocking=True)
-    if hand is not None:
-        hand.stop()
+        position = float(state["gripper_position"])
+        if np.isfinite(position) and 0 <= position <= silhouette.OPEN_TOL:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"Gripper did not report open (position={position}; expected 0..{silhouette.OPEN_TOL}). "
+                "Calibration stopped before arm motion. Check gripper power, connections and NUC activation logs."
+            )
+        time.sleep(0.1)
 
-    return {
-        "frames": np.stack(frames),
-        "joint_positions": np.array(joint_positions),
-        "gripper_positions": np.array(gripper_positions),
-        "fy": fetch_intrinsics(serial, "left")[1],
-    }
+
+def capture(serial: str, embodiment: str) -> dict:
+    """Capture Michael's six-pose sweep with the end effector open."""
+    from deployment.camera_utils.camera_readers.zed_camera import gather_zed_cameras
+    from deployment.misc.server_interface import ServerInterface
+
+    if not os.environ.get("CLOAK_NUC_IP"):
+        raise ValueError("Set CLOAK_NUC_IP in .env")
+    if input("Start the NUC controllers for calibration? [y/N]: ").strip().lower() != "y":
+        raise SystemExit("Cancelled before controller startup.")
+    cameras = {cam.serial_number: cam for cam in gather_zed_cameras()}
+    if serial not in cameras:
+        raise ValueError(f"Camera {serial} not found; detected {list(cameras)}")
+    camera, hand = cameras[serial], None
+    try:
+        camera.set_reading_parameters()
+        camera.set_trajectory_mode()
+        robot = ServerInterface(
+            ip_address=os.environ["CLOAK_NUC_IP"],
+            use_gripper=embodiment != "sharpa",
+            gripper_kind="franka_hand" if embodiment == "umi" else "robotiq_2f",
+        )
+        hand = _connect_sharpa_hand() if embodiment == "sharpa" else None
+        home = HOME_QPOS[embodiment]
+        if input(f"Move to home, then sweep through {len(SWEEP_OFFSETS)} poses? Check clearance. [y/N]: ").strip().lower() != "y":
+            raise SystemExit("Cancelled before sweep.")
+        if hand is None:
+            robot.update_gripper(0, velocity=False, blocking=True)
+            require_open_gripper(robot)
+        else:
+            hand.set_joint_position(SHARPA_HAND_QPOS_OPEN.tolist(), True)
+            time.sleep(1.0)
+        robot.update_joints(home, velocity=False, blocking=True)
+        frames, joint_positions, gripper_positions = [], [], []
+        key = f"{serial}_left"
+        matrix = camera.get_intrinsics()[key]["cameraMatrix"]
+        for offset in SWEEP_OFFSETS:
+            robot.update_joints(home + offset, velocity=False, blocking=True)
+            time.sleep(0.5)
+            state, _ = robot.get_robot_state()
+            for _ in range(3):
+                reading = camera.read_camera()
+                if reading is None:
+                    raise RuntimeError("Camera frame acquisition failed")
+                image = reading[0]["image"][key]
+            rgb = image[..., :3][..., ::-1]
+            frames.append(_resize_no_pad(rgb, RLDS_H, RLDS_W))
+            joint_positions.append(state["joint_positions"])
+            if hand is None:
+                gripper_positions.append(state["gripper_position"])
+            else:
+                _, hand_qpos = hand.get_joint_position_rad()
+                gripper_positions.append(sharpa_gripper_from_hand_qpos(np.asarray(hand_qpos)[:22]))
+        robot.update_joints(home, velocity=False, blocking=True)
+        return {
+            "frames": np.stack(frames),
+            "joint_positions": np.array(joint_positions),
+            "gripper_positions": np.array(gripper_positions),
+            "fy": float(matrix[1, 1]) * RLDS_H / image.shape[0],
+            "camera_id": serial, "lens": "left", "embodiment": embodiment,
+        }
+    finally:
+        camera.disable_camera()
+        if hand is not None:
+            hand.stop()
 
 
 def overlay(frame: np.ndarray, mask: np.ndarray, color=(0, 255, 0), alpha: float = 0.6) -> np.ndarray:
@@ -234,22 +260,50 @@ def render_external(sim: silhouette.Sim, target: silhouette.Target, pose: np.nda
 
 
 def main(args: Args) -> None:
+    if args.embodiment not in HOME_QPOS:
+        raise ValueError("Silhouette capture supports robotiq, umi, and sharpa.")
+    if args.lens != "left":
+        raise ValueError("Silhouette calibration currently supports the left lens only.")
+    if sum((args.resume, args.from_capture is not None, args.captures is not None)) > 1:
+        raise ValueError("Use only one of --captures, --from-capture, or --resume.")
     output_dir = OUTPUT_ROOT / args.embodiment
     output_dir.mkdir(parents=True, exist_ok=True)
     capture_path = output_dir / f"frames_{args.embodiment}.npz"
     overlay_path = output_dir / f"mask_overlay_{args.embodiment}.png"
 
-    if args.from_capture is not None:
-        data = dict(np.load(args.from_capture))
+    saved_capture = args.from_capture
+    if args.captures is not None:
+        if not args.captures.is_dir():
+            raise ValueError(f"Capture folder does not exist: {args.captures}")
+        saved_capture = args.captures / f"frames_{args.embodiment}.npz"
+    elif args.resume:
+        saved_capture = capture_path
+    if saved_capture is not None:
+        if not saved_capture.is_file():
+            raise ValueError(f"Capture file does not exist: {saved_capture}")
+        with np.load(saved_capture, allow_pickle=False) as saved:
+            data = dict(saved)
+        if not args.wrist_camera_id:
+            args.wrist_camera_id = str(data.get("camera_id", ""))
+        if not args.wrist_camera_id.isdigit():
+            raise ValueError("Capture camera_id missing or invalid")
     else:
+        if not args.wrist_camera_id.isdigit():
+            raise ValueError("Set a numeric --wrist-camera-id for live capture")
         assert args.embodiment in HOME_QPOS, f"Live capture supports {list(HOME_QPOS)}, got {args.embodiment!r}"
         data = capture(args.wrist_camera_id, args.embodiment)
         np.savez_compressed(capture_path, **data)
         print(f"Saved capture to {capture_path}")
 
+    for field, expected in (("camera_id", args.wrist_camera_id), ("lens", args.lens), ("embodiment", args.embodiment)):
+        if field not in data or str(data[field]) != expected:
+            raise ValueError(f"Capture {field} missing or mismatched. Recapture with this entry point.")
     fy = float(data["fy"])
+    if not np.isfinite(fy) or fy <= 0:
+        raise ValueError("Invalid capture focal length")
     n_open = int((data["gripper_positions"] <= silhouette.OPEN_TOL).sum())
-    assert n_open >= MIN_FRAMES, f"Only {n_open} gripper-open frames; need at least {MIN_FRAMES}."
+    if n_open < MIN_FRAMES:
+        raise ValueError(f"Only {n_open} gripper-open frames; need {MIN_FRAMES}. Check gripper activation before recapturing; --resume cannot fix a closed-gripper capture.")
     # Pseudo-GT intensity cue: pixels closest to the end effector's color, measured from
     # the frames (the model's display colors can be far off under real lighting).
     crop = CROP[args.embodiment]
@@ -260,6 +314,9 @@ def main(args: Args) -> None:
     sim = silhouette.Sim(args.embodiment)
     init = INIT_CAM_TO_GRIPPER[args.embodiment]
     pose, iou_init, iou_opt, _ = silhouette.optimize_pose(target, fy, sim, init)
+    if not np.isfinite(pose).all() or not np.isfinite([iou_init, iou_opt]).all() or iou_opt <= 0 or iou_opt < iou_init:
+        sim.renderer.close()
+        raise ValueError("Silhouette fit failed; existing calibration was not changed.")
     print(f"IoU {iou_init:.3f} (init) -> {iou_opt:.3f} (calibrated)")
     print(f"cam_to_gripper: {np.round(pose, 4).tolist()}")
 
@@ -279,9 +336,11 @@ def main(args: Args) -> None:
     Image.fromarray(np.concatenate(panels, axis=1)).save(overlay_path)
     print(f"Mask overlay (pseudo-GT | calibrated on RGB | external view): {overlay_path}")
 
-    calib_path = Path(calib_info_path(args.embodiment))
-    calib = {f"{args.wrist_camera_id}_left": {"pose": pose.tolist(), "timestamp": time.time()}}
-    calib_path.write_text(json.dumps(calib, indent=2) + "\n")
+    calib_path = save_calibration_info(
+        args.embodiment, args.wrist_camera_id, pose, initial_pose=init,
+        lens=args.lens, method="silhouette",
+        quality={"iou_initial": float(iou_init), "iou_optimized": float(iou_opt)},
+    )
     print(f"Wrote {calib_path}")
 
 

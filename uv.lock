@@ -283,9 +283,12 @@ client = [
     { name = "zerorpc" },
 ]
 dev = [
+    { name = "gym" },
     { name = "matplotlib" },
+    { name = "moviepy" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "zerorpc" },
 ]
 preprocess = [
     { name = "huggingface-hub" },
@@ -333,15 +336,18 @@ requires-dist = [
 client = [
     { name = "gym", specifier = ">=0.26.2" },
     { name = "matplotlib", specifier = ">=3.10.0" },
-    { name = "moviepy", specifier = ">=1.0.3" },
+    { name = "moviepy", specifier = ">=2.0" },
     { name = "pyzed", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", url = "https://download.stereolabs.com/zedsdk/5.1/whl/linux_x86_64/pyzed-5.1-cp311-cp311-linux_x86_64.whl" },
     { name = "tqdm", specifier = ">=4.66.0" },
     { name = "zerorpc", specifier = ">=0.6.3" },
 ]
 dev = [
+    { name = "gym", specifier = ">=0.26.2" },
     { name = "matplotlib", specifier = ">=3.10.0" },
+    { name = "moviepy", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "ruff", specifier = ">=0.8.6" },
+    { name = "zerorpc", specifier = ">=0.6.3" },
 ]
 preprocess = [
     { name = "huggingface-hub", specifier = ">=0.24" },

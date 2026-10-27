@@ -85,7 +85,7 @@ class ServerInterface:
 
     def launch_controller(self, gripper_kind="robotiq_2f"):
         # NUC server signature: launch_controller(gripper_kind="robotiq_2f").
-        self.server.launch_controller(gripper_kind)
+        self.server.launch_controller(gripper_kind, self.use_gripper)
 
     def launch_robot(self, use_gripper=True):
         # NUC server signature: launch_robot(use_gripper=None). With use_gripper=False

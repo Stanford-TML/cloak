@@ -77,7 +77,7 @@ def _init_hand(hand) -> bool:
 class FrankaSharpaEnv(RobotEnv):
     """RobotEnv with Sharpa hand instead of gripper."""
 
-    def __init__(self, hand_spec="sharpa_R", action_space="joint_position", use_cameras=False, do_reset=True, hand_camera_id=None, debug=False, debug_camera_ids=None):
+    def __init__(self, hand_spec="sharpa_R", action_space="joint_position", use_cameras=False, do_reset=True, hand_camera_id=None, calibration_lens="left", debug=False, debug_camera_ids=None):
         assert action_space in ("joint_position", "cartesian_position"), (
             f"FrankaSharpaEnv only supports 'joint_position' or 'cartesian_position', "
             f"got '{action_space}'"
@@ -91,6 +91,7 @@ class FrankaSharpaEnv(RobotEnv):
             use_gripper=False,
             calibration_name="sharpa",  # calibration_info_sharpa.json (scripts/calibrate_wrist_camera.sh)
             hand_camera_id=hand_camera_id,
+            calibration_lens=calibration_lens,
             debug=debug,
             debug_camera_ids=debug_camera_ids,
         )

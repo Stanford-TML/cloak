@@ -1,0 +1,68 @@
+[
+  {
+    "file": "droid_camera_closing_part.stl",
+    "sha256": "9155fe9f922cbe592135bcfaf90d69089da3874d116c7aacce812e597490f2fb",
+    "triangles": 908,
+    "bounds": [
+      49.39583,
+      45.0,
+      34.10705
+    ],
+    "edges_not_shared_twice": 0
+  },
+  {
+    "file": "sharpa_angled_adapter_model.stl",
+    "sha256": "81fe4e37375c80250af7478f5d3509bcc0cc00e156e8ea67826a0b299d7bdca3",
+    "triangles": 6620,
+    "bounds": [
+      0.08,
+      0.08,
+      0.07088
+    ],
+    "edges_not_shared_twice": 0
+  },
+  {
+    "file": "cloak_yam_mount.stl",
+    "sha256": "a722f6f2a1b778c1d8c79208d902d09a5730f7fce01dc3655f83116bf18c308d",
+    "triangles": 2805,
+    "bounds": [
+      35.53495,
+      101.0,
+      151.43442
+    ],
+    "edges_not_shared_twice": 169
+  },
+  {
+    "file": "cloak_sharpa_mount.stl",
+    "sha256": "1867e3106b583832ab592e9341af9a1244e55e4b60dfb52aa6a073b2f473849c",
+    "triangles": 1505,
+    "bounds": [
+      56.65022,
+      231.8495,
+      95.78356
+    ],
+    "edges_not_shared_twice": 10
+  },
+  {
+    "file": "sharpa_angled_adapter_mm.stl",
+    "sha256": "21818403b56d0b209f63466bbddef2ea36c88dcc288417005280751a27d0153d",
+    "triangles": 6620,
+    "bounds": [
+      80.0,
+      80.0,
+      70.87852
+    ],
+    "edges_not_shared_twice": 0
+  },
+  {
+    "file": "droid_camera_mount.stl",
+    "sha256": "81fe9011939bf5e5bed62b255586c0c355ac6209394c581f807dd8d5a13dd270",
+    "triangles": 1532,
+    "bounds": [
+      71.22303,
+      101.0,
+      34.10705
+    ],
+    "edges_not_shared_twice": 1
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "status": "Replacement runtime functionally tested on Robotiq, UMI and Sharpa; final release hardware regression pending. Fresh-base reproducibility is not verified.",
+  "observed_image_tag": "ghcr.io/droid-dataset/droid_nuc:panda",
+  "observed_local_image_id": "sha256:3d91dc3e501267ff0d2f867cd3c4dbcd0f29b7124c6bfe6780c9ca3514c39090",
+  "registry_digest": null,
+  "fairo_commit": "0a01a7fa7a7c65b2f9a3aebf5e79040940daf9d2",
+  "libfranka": "0.9.0",
+  "native_hand_binary_sha256": "ac10e19855d61d6a424d198b931b7e6c9b2ac8fbaf87f0cb8b6fd79eb008b559",
+  "native_hand_source_note": "Host exception-handling patch differs from running container source; do not assume it is compiled into this binary.",
+  "tested_derivative_image_id": "sha256:7b780475b670d0a5cbcc31b75a4bb29ad17e7a4ecaa23e6820d3fa717fecb453",
+  "registry_access_note": "Manifest request for observed tag returned unauthorized on 2026-10-27. Use an existing verified compatible DROID image; do not assume this tag is publicly pullable."
+}
